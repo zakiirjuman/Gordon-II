@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Toronto Urban Ops Copilot</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0b1220;
+      --panel: #121a2b;
+      --accent: #76b900;
+      --text: #e8eefc;
+      --muted: #9fb0d0;
+      --border: #24314d;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Inter, system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 1rem 1.25rem;
+      border-bottom: 1px solid var(--border);
+      background: linear-gradient(90deg, #0b1220, #132038);
+    }
+    header h1 {
+      margin: 0;
+      font-size: 1.1rem;
+      font-weight: 700;
+    }
+    header p {
+      margin: 0.2rem 0 0;
+      color: var(--muted);
+      font-size: 0.85rem;
+    }
+    .badge {
+      background: rgba(118, 185, 0, 0.15);
+      color: var(--accent);
+      border: 1px solid rgba(118, 185, 0, 0.35);
+      padding: 0.35rem 0.7rem;
+      border-radius: 999px;
+      font-size: 0.75rem;
+    }
+    main {
+      display: grid;
+      grid-template-columns: 1.1fr 0.9fr;
+      min-height: calc(100vh - 72px);
+    }
+    #map { min-height: 100%; background: #09101d; }
+    .sidebar {
+      border-left: 1px solid var(--border);
+      background: var(--panel);
+      padding: 1rem;
+      overflow: auto;
+    }
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 0.75rem;
+      margin-bottom: 1rem;
+    }
+    .stat {
+      background: rgba(255,255,255,0.03);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 0.8rem;
+    }
+    .stat .label { color: var(--muted); font-size: 0.75rem; }
+    .stat .value { font-size: 1.4rem; font-weight: 700; margin-top: 0.25rem; }
+    .panel {
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 0.9rem;
+      margin-bottom: 1rem;
+      background: rgba(255,255,255,0.02);
+    }
+    .panel h2 {
+      margin: 0 0 0.6rem;
+      font-size: 0.95rem;
+    }
+    button, input {
+      font: inherit;
+    }
+    button {
+      background: var(--accent);
+      color: #081005;
+      border: none;
+      border-radius: 10px;
+      padding: 0.65rem 0.9rem;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    button:disabled {
+      opacity: 0.6;
+      cursor: wait;
+    }
+    input {
+      width: 100%;
+      background: #0d1526;
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 0.65rem 0.75rem;
+      margin: 0.5rem 0;
+    }
+    pre, .output {
+      white-space: pre-wrap;
+      font-size: 0.85rem;
+      line-height: 1.45;
+      color: #d8e4ff;
+    }
+    ul.compact {
+      margin: 0;
+      padding-left: 1rem;
+      color: var(--muted);
+      font-size: 0.85rem;
+    }
+    .error { color: #ff8f8f; }
+    @media (max-width: 960px) {
+      main { grid-template-columns: 1fr; }
+      #map { min-height: 50vh; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>Toronto Urban Ops Copilot</h1>
+      <p>Live road restrictions + KSI safety signals, briefed locally by Nemotron on DGX Spark</p>
+    </div>
+    <div class="badge">NVIDIA Spark · Urban Operations</div>
+  </header>
+  <main>
+    <div id="map"></div>
+    <aside class="sidebar">
+      <div class="stats" id="stats"></div>
+
+      <section class="panel">
+        <h2>Ops briefing</h2>
+        <button id="briefingBtn">Generate briefing</button>
+        <div id="briefing" class="output"></div>
+      </section>
+
+      <section class="panel">
+        <h2>Ask the copilot</h2>
+        <input id="question" placeholder="e.g. Which corridors have the most active closures?" />
+        <button id="askBtn">Ask Nemotron</button>
+        <div id="answer" class="output"></div>
+      </section>
+
+      <section class="panel">
+        <h2>Top restricted roads</h2>
+        <ul class="compact" id="topRoads"></ul>
+      </section>
+    </aside>
+  </main>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    const map = L.map('map').setView([43.6532, -79.3832], 11);
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+      attribution: '&copy; OpenStreetMap &copy; CARTO'
+    }).addTo(map);
+
+    const restrictionLayer = L.geoJSON(null, {
+      style: { color: '#76b900', weight: 4, opacity: 0.85 },
+      onEachFeature: (feature, layer) => {
+        const p = feature.properties || {};
+        layer.bindPopup(`
+          <strong>${p.MAIN_ROAD || 'Road restriction'}</strong><br/>
+          ${p.ROAD_CLOSURE_TYPE || ''}<br/>
+          ${p.STATUS || ''}<br/>
+          ${(p.DESCRIPTION || '').slice(0, 180)}
+        `);
+      }
+    }).addTo(map);
+
+    const hubLayer = L.geoJSON(null, {
+      pointToLayer: (_, latlng) => L.circleMarker(latlng, {
+        radius: 7, color: '#ffb454', fillColor: '#ffb454', fillOpacity: 0.85
+      }),
+      onEachFeature: (feature, layer) => {
+        const p = feature.properties || {};
+        layer.bindPopup(`<strong>Construction hub</strong><br/>${p.NAME || p.MAIN_ROAD || ''}`);
+      }
+    }).addTo(map);
+
+    async function loadData() {
+      const [snapshot, restrictions, hubs] = await Promise.all([
+        fetch('/api/snapshot').then(r => r.json()),
+        fetch('/api/layers/road-restrictions').then(r => r.json()),
+        fetch('/api/layers/construction-hubs').then(r => r.json()),
+      ]);
+
+      document.getElementById('stats').innerHTML = `
+        <div class="stat"><div class="label">Active restrictions</div><div class="value">${snapshot.counts.active_road_restrictions}</div></div>
+        <div class="stat"><div class="label">Construction hubs</div><div class="value">${snapshot.counts.construction_hubs}</div></div>
+        <div class="stat"><div class="label">KSI collisions (12mo)</div><div class="value">${snapshot.counts.recent_ksi_collisions_12mo}</div></div>
+      `;
+
+      document.getElementById('topRoads').innerHTML = snapshot.top_restricted_roads
+        .slice(0, 8)
+        .map(([road, count]) => `<li>${road} (${count})</li>`)
+        .join('');
+
+      restrictionLayer.clearLayers();
+      restrictionLayer.addData(restrictions);
+      hubLayer.clearLayers();
+      hubLayer.addData(hubs);
+
+      const bounds = restrictionLayer.getBounds();
+      if (bounds.isValid()) map.fitBounds(bounds.pad(0.08));
+    }
+
+    async function postJson(url, body) {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: body ? { 'Content-Type': 'application/json' } : undefined,
+        body: body ? JSON.stringify(body) : undefined,
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || res.statusText);
+      return data;
+    }
+
+    document.getElementById('briefingBtn').addEventListener('click', async () => {
+      const btn = document.getElementById('briefingBtn');
+      const out = document.getElementById('briefing');
+      btn.disabled = true;
+      out.textContent = 'Running local Nemotron briefing...';
+      try {
+        const data = await postJson('/api/briefing');
+        out.textContent = data.briefing;
+      } catch (err) {
+        out.innerHTML = `<span class="error">${err.message}</span>`;
+      } finally {
+        btn.disabled = false;
+      }
+    });
+
+    document.getElementById('askBtn').addEventListener('click', async () => {
+      const question = document.getElementById('question').value.trim();
+      const out = document.getElementById('answer');
+      if (!question) return;
+      const btn = document.getElementById('askBtn');
+      btn.disabled = true;
+      out.textContent = 'Thinking locally on Spark...';
+      try {
+        const data = await postJson('/api/ask', { question });
+        out.textContent = data.answer;
+      } catch (err) {
+        out.innerHTML = `<span class="error">${err.message}</span>`;
+      } finally {
+        btn.disabled = false;
+      }
+    });
+
+    loadData().catch(err => {
+      document.getElementById('briefing').innerHTML = `<span class="error">${err.message}</span>`;
+    });
+  </script>
+</body>
+</html>
