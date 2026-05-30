@@ -1,28 +1,31 @@
 #!/usr/bin/env bash
+# Deploy urban-ops-copilot to ASUS GX10 (Tailscale: gx10-49d1).
 set -euo pipefail
 
-HOST="${1:-asus@gx10-49d1}"
-REMOTE_DIR="${2:-~/urban-ops-copilot}"
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$ROOT"
 
-echo "Deploying to ${HOST}:${REMOTE_DIR}"
+export DEPLOY_HOST="${DEPLOY_HOST:-asus@gx10-49d1}"
+export REMOTE_DIR="${REMOTE_DIR:-~/urban-ops-copilot}"
+export PORT="${PORT:-8080}"
+export NVSYNC_KEY="${NVSYNC_KEY:-$HOME/Library/Application Support/NVIDIA/Sync/config/nvsync.key}"
 
-rsync -avz --delete \
-  --exclude '.git' \
-  --exclude '__pycache__' \
-  --exclude '.venv' \
-  ./ "${HOST}:${REMOTE_DIR}/"
+echo "=== GX10 deploy ==="
+echo "  host:       $DEPLOY_HOST"
+echo "  remote dir: $REMOTE_DIR"
+echo "  port:       $PORT"
+if [[ -f "$NVSYNC_KEY" ]]; then
+  echo "  ssh key:    $NVSYNC_KEY"
+else
+  echo "  ssh key:    (not found — set NVSYNC_KEY or use ~/.ssh/config)"
+fi
 
-ssh -o StrictHostKeyChecking=no "${HOST}" bash -s <<EOF
-set -euo pipefail
-cd "${REMOTE_DIR}"
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -q -r requirements.txt
-pkill -f 'uvicorn app.main:app' || true
-nohup .venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8080 > urban-ops.log 2>&1 &
-sleep 2
-curl -s http://127.0.0.1:8080/api/health
-EOF
-
-echo
-echo "App should be live at http://gx10-49d1:8080 (via Tailscale)"
+python3 scripts/deploy_remote.py
+status=$?
+if [[ $status -eq 0 ]]; then
+  echo ""
+  echo "Verify locally:"
+  echo "  curl -s http://gx10-49d1:${PORT}/api/health"
+  echo "  curl -s http://gx10-49d1:${PORT}/api/snapshot | python3 -c \"import sys,json; print(json.load(sys.stdin)['counts'])\""
+fi
+exit "$status"
