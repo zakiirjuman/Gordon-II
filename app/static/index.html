@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Toronto Urban Ops Copilot</title>
+  <title>Gordon II — Lawful Patrol Copilot</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <style>
     :root {
@@ -11,6 +11,8 @@
       --bg: #0b1220;
       --panel: #121a2b;
       --accent: #76b900;
+      --warn: #ffb454;
+      --danger: #ff8f8f;
       --text: #e8eefc;
       --muted: #9fb0d0;
       --border: #24314d;
@@ -28,18 +30,10 @@
       align-items: center;
       padding: 1rem 1.25rem;
       border-bottom: 1px solid var(--border);
-      background: linear-gradient(90deg, #0b1220, #132038);
+      background: linear-gradient(90deg, #0b1220, #1a2540);
     }
-    header h1 {
-      margin: 0;
-      font-size: 1.1rem;
-      font-weight: 700;
-    }
-    header p {
-      margin: 0.2rem 0 0;
-      color: var(--muted);
-      font-size: 0.85rem;
-    }
+    header h1 { margin: 0; font-size: 1.15rem; font-weight: 700; }
+    header p { margin: 0.2rem 0 0; color: var(--muted); font-size: 0.85rem; }
     .badge {
       background: rgba(118, 185, 0, 0.15);
       color: var(--accent);
@@ -47,6 +41,7 @@
       padding: 0.35rem 0.7rem;
       border-radius: 999px;
       font-size: 0.75rem;
+      text-align: right;
     }
     main {
       display: grid;
@@ -81,13 +76,8 @@
       margin-bottom: 1rem;
       background: rgba(255,255,255,0.02);
     }
-    .panel h2 {
-      margin: 0 0 0.6rem;
-      font-size: 0.95rem;
-    }
-    button, input {
-      font: inherit;
-    }
+    .panel h2 { margin: 0 0 0.6rem; font-size: 0.95rem; }
+    button, input { font: inherit; }
     button {
       background: var(--accent);
       color: #081005;
@@ -96,11 +86,9 @@
       padding: 0.65rem 0.9rem;
       font-weight: 700;
       cursor: pointer;
+      width: 100%;
     }
-    button:disabled {
-      opacity: 0.6;
-      cursor: wait;
-    }
+    button:disabled { opacity: 0.6; cursor: wait; }
     input {
       width: 100%;
       background: #0d1526;
@@ -110,11 +98,20 @@
       padding: 0.65rem 0.75rem;
       margin: 0.5rem 0;
     }
-    pre, .output {
+    .output {
       white-space: pre-wrap;
       font-size: 0.85rem;
-      line-height: 1.45;
+      line-height: 1.5;
       color: #d8e4ff;
+      margin-top: 0.75rem;
+    }
+    .disclaimer {
+      font-size: 0.72rem;
+      color: var(--muted);
+      border-top: 1px solid var(--border);
+      padding-top: 0.75rem;
+      margin-top: 0.5rem;
+      line-height: 1.4;
     }
     ul.compact {
       margin: 0;
@@ -122,7 +119,8 @@
       color: var(--muted);
       font-size: 0.85rem;
     }
-    .error { color: #ff8f8f; }
+    .error { color: var(--danger); }
+    details { margin-top: 0.5rem; font-size: 0.8rem; color: var(--muted); }
     @media (max-width: 960px) {
       main { grid-template-columns: 1fr; }
       #map { min-height: 50vh; }
@@ -132,10 +130,10 @@
 <body>
   <header>
     <div>
-      <h1>Toronto Urban Ops Copilot</h1>
-      <p>Live road restrictions + KSI safety signals, briefed locally by Nemotron on DGX Spark</p>
+      <h1>Gordon II</h1>
+      <p>Not Batman — lawful patrol intelligence on Toronto data + cited policy cards</p>
     </div>
-    <div class="badge">NVIDIA Spark · Urban Operations</div>
+    <div class="badge">NVIDIA Spark · Gordon II v0.2</div>
   </header>
   <main>
     <div id="map"></div>
@@ -143,22 +141,31 @@
       <div class="stats" id="stats"></div>
 
       <section class="panel">
-        <h2>Ops briefing</h2>
-        <button id="briefingBtn">Generate briefing</button>
+        <h2>Patrol brief</h2>
+        <button id="briefingBtn">Generate patrol brief</button>
         <div id="briefing" class="output"></div>
+        <details id="lawDetails" hidden>
+          <summary>Law cards retrieved</summary>
+          <pre id="lawContext" class="output"></pre>
+        </details>
       </section>
 
       <section class="panel">
-        <h2>Ask the copilot</h2>
-        <input id="question" placeholder="e.g. Which corridors have the most active closures?" />
-        <button id="askBtn">Ask Nemotron</button>
+        <h2>Ask Gordon</h2>
+        <input id="question" placeholder="e.g. Traffic stop near active closure on Lawrence — what should I consider?" />
+        <button id="askBtn">Ask (local Nemotron)</button>
         <div id="answer" class="output"></div>
       </section>
 
       <section class="panel">
-        <h2>Top restricted roads</h2>
+        <h2>Hot corridors</h2>
         <ul class="compact" id="topRoads"></ul>
       </section>
+
+      <p class="disclaimer">
+        Decision support only — not legal advice. Verify statute, service policy, and supervisor direction before acting.
+        Runs locally on DGX Spark; Toronto open data + curated training cards (<span id="corpusVer">—</span>).
+      </p>
     </aside>
   </main>
 
@@ -193,16 +200,19 @@
     }).addTo(map);
 
     async function loadData() {
-      const [snapshot, restrictions, hubs] = await Promise.all([
+      const [snapshot, restrictions, hubs, health] = await Promise.all([
         fetch('/api/snapshot').then(r => r.json()),
         fetch('/api/layers/road-restrictions').then(r => r.json()),
         fetch('/api/layers/construction-hubs').then(r => r.json()),
+        fetch('/api/health').then(r => r.json()),
       ]);
 
+      document.getElementById('corpusVer').textContent = health.corpus_version || '—';
+
       document.getElementById('stats').innerHTML = `
-        <div class="stat"><div class="label">Active restrictions</div><div class="value">${snapshot.counts.active_road_restrictions}</div></div>
-        <div class="stat"><div class="label">Construction hubs</div><div class="value">${snapshot.counts.construction_hubs}</div></div>
-        <div class="stat"><div class="label">KSI collisions (12mo)</div><div class="value">${snapshot.counts.recent_ksi_collisions_12mo}</div></div>
+        <div class="stat"><div class="label">Restrictions</div><div class="value">${snapshot.counts.active_road_restrictions}</div></div>
+        <div class="stat"><div class="label">Construction</div><div class="value">${snapshot.counts.construction_hubs}</div></div>
+        <div class="stat"><div class="label">KSI (12mo)</div><div class="value">${snapshot.counts.recent_ksi_collisions_12mo}</div></div>
       `;
 
       document.getElementById('topRoads').innerHTML = snapshot.top_restricted_roads
@@ -230,14 +240,25 @@
       return data;
     }
 
+    function showLawContext(lawContext) {
+      const details = document.getElementById('lawDetails');
+      if (!lawContext) {
+        details.hidden = true;
+        return;
+      }
+      details.hidden = false;
+      document.getElementById('lawContext').textContent = lawContext;
+    }
+
     document.getElementById('briefingBtn').addEventListener('click', async () => {
       const btn = document.getElementById('briefingBtn');
       const out = document.getElementById('briefing');
       btn.disabled = true;
-      out.textContent = 'Running local Nemotron briefing...';
+      out.textContent = 'Running patrol brief on Spark (Nemotron + law cards)...';
       try {
-        const data = await postJson('/api/briefing');
+        const data = await postJson('/api/patrol-brief');
         out.textContent = data.briefing;
+        showLawContext(data.law_context);
       } catch (err) {
         out.innerHTML = `<span class="error">${err.message}</span>`;
       } finally {
