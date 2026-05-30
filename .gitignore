@@ -1,0 +1,24 @@
+# General
+.DS_Store
+*.log
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Virtual environments
+venv/
+.env
+
+# Node
+node_modules/
+
+# Data (large files — fetch separately)
+data/*.json
+data/*.csv
+
+# Editors
+.idea/
+.vscode/
+.cursor/
