@@ -2,6 +2,11 @@ from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent
 STATIC_DIR = BASE_DIR / "static"
+CORPUS_DIR = BASE_DIR / "corpus"
+
+APP_NAME = "Gordon II"
+APP_TAGLINE = "Lawful patrol intelligence — not Batman."
+CORPUS_VERSION = "gordon-ii-0.1"
 
 GIS_BASE = "https://gis.toronto.ca/arcgis/rest/services/cot_geospatial2/FeatureServer"
 ROAD_RESTRICTIONS_LAYER = 77
