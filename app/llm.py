@@ -88,6 +88,7 @@ async def _ollama_generate(prompt: str) -> str:
         "prompt": prompt,
         "system": SYSTEM_PROMPT,
         "stream": False,
+        "think": False,
         "options": {
             "temperature": 0.2,
             "num_predict": 900,
