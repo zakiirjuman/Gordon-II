@@ -63,12 +63,14 @@ async def index() -> FileResponse:
 
 @app.get("/api/health")
 async def health() -> dict[str, object]:
+    whisper_runtime = {}
     try:
-        from app.voice import whisper_available
+        from app.voice import whisper_available, whisper_runtime as get_whisper_runtime
     except Exception:  # noqa: BLE001
         whisper_ready = False
     else:
         whisper_ready = whisper_available()
+        whisper_runtime = get_whisper_runtime()
     return {
         "status": "ok",
         "product": APP_NAME,
@@ -76,6 +78,7 @@ async def health() -> dict[str, object]:
         "ollama_model": OLLAMA_MODEL,
         "whisper_model": WHISPER_MODEL,
         "whisper_ready": whisper_ready,
+        "whisper_runtime": whisper_runtime,
         "cudf_ready": cudf_available(),
     }
 

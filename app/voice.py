@@ -7,13 +7,27 @@ from pathlib import Path
 
 from fastapi import UploadFile
 
-from app.config import WHISPER_COMPUTE_TYPE, WHISPER_DEVICE, WHISPER_MODEL
+from app.config import (
+    WHISPER_COMPUTE_TYPE,
+    WHISPER_CPU_COMPUTE_TYPE,
+    WHISPER_DEVICE,
+    WHISPER_MODEL,
+)
 
 _model = None
+_runtime = {
+    "device": WHISPER_DEVICE,
+    "compute_type": WHISPER_COMPUTE_TYPE,
+    "fallback": False,
+}
 
 
 def whisper_available() -> bool:
     return find_spec("faster_whisper") is not None
+
+
+def whisper_runtime() -> dict[str, object]:
+    return dict(_runtime)
 
 
 def _load_model():
@@ -27,11 +41,29 @@ def _load_model():
             "Voice support requires faster-whisper. Install the Spark extras before using /api/voice/ask."
         ) from exc
 
-    _model = WhisperModel(
-        WHISPER_MODEL,
-        device=WHISPER_DEVICE,
-        compute_type=WHISPER_COMPUTE_TYPE,
-    )
+    try:
+        _model = WhisperModel(
+            WHISPER_MODEL,
+            device=WHISPER_DEVICE,
+            compute_type=WHISPER_COMPUTE_TYPE,
+        )
+    except RuntimeError as exc:
+        message = str(exc)
+        if "CUDA" not in message.upper():
+            raise
+        _runtime.update(
+            {
+                "device": "cpu",
+                "compute_type": WHISPER_CPU_COMPUTE_TYPE,
+                "fallback": True,
+                "reason": message,
+            }
+        )
+        _model = WhisperModel(
+            WHISPER_MODEL,
+            device="cpu",
+            compute_type=WHISPER_CPU_COMPUTE_TYPE,
+        )
     return _model
 
 
