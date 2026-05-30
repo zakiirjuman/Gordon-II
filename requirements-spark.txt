@@ -5,13 +5,16 @@
 #   pip install --extra-index-url=https://pypi.nvidia.com cudf-cu12
 
 # GPU ASR decision:
-# Prefer NVIDIA Speech NIM / Parakeet when the local NIM container is running
-# on port 9000. Fall back to NeMo / Parakeet on PyTorch CUDA when the GX10 has a
-# compatible ARM64 + GB10 PyTorch stack. The current faster-whisper path remains
-# a CPU fallback because the available CTranslate2 wheel reports no CUDA support.
+# Prefer the local ARM64 Parakeet TDT service in asr/parakeet-spark when it is
+# running on port 8010. Fall back to NeMo / Parakeet on PyTorch CUDA when the
+# GX10 app venv has a compatible ARM64 + GB10 PyTorch stack. The current
+# faster-whisper path remains a CPU fallback because the available CTranslate2
+# wheel reports no CUDA support.
 #
-# NIM container tried for demo:
-#   nvcr.io/nim/nvidia/parakeet-ctc-1.1b-asr:latest
+# Build/run native DGX Spark ASR service:
+#   cd asr/parakeet-spark
+#   export NGC_API_KEY=...
+#   ./build-and-run.sh
 #
 # Compatibility spike commands:
 #   python - <<'PY'
