@@ -86,10 +86,10 @@ See **[DEPLOY.md](./DEPLOY.md)**. Default: `~/urban-ops-copilot` on port **8080*
 
 ### Voice ASR decision (demo)
 
-- Preferred hackathon path: **NVIDIA NeMo / Parakeet ASR on PyTorch CUDA**.
-- Riva / Speech NIM is the stronger production packaging story, but it adds NGC credentials and container orchestration during the hackathon.
-- `faster-whisper` remains a fallback. On the current GX10 ARM64 environment, its CTranslate2 backend reports no CUDA support, so it may fall back to CPU.
-- Judge framing: voice stays local to Spark either way; NeMo/Parakeet is the practical NVIDIA-native GPU path for the live demo.
+- Preferred live GPU path: **NVIDIA Speech NIM / Parakeet ASR** on the GX10 (`parakeet-ctc-1.1b-asr` when available).
+- App fallback path: **NVIDIA NeMo / Parakeet ASR** on PyTorch CUDA when a compatible GB10 ARM64 PyTorch stack is installed.
+- Last-resort fallback: `faster-whisper` CPU. On the current GX10 ARM64 environment, its CTranslate2 backend reports no CUDA support.
+- Judge framing: voice stays local to Spark; the ASR stack prefers NVIDIA GPU services and degrades safely if the GPU ASR service is unavailable.
 
 ## Prompt contract
 

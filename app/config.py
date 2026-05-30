@@ -28,6 +28,8 @@ DEFAULT_POINT_RADIUS_M = 500
 MOCK_BACKUP_ETA_MINUTES = 8
 
 ASR_BACKEND = "auto"
+NIM_ASR_URL = "http://127.0.0.1:9000"
+NIM_ASR_MODEL = "parakeet-ctc-1.1b-asr"
 NEMO_ASR_MODEL = "nvidia/parakeet-tdt-0.6b-v3"
 
 WHISPER_MODEL = "distil-large-v3"

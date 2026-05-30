@@ -6,11 +6,14 @@ import wave
 from importlib.util import find_spec
 from pathlib import Path
 
+import httpx
 from fastapi import UploadFile
 
 from app.config import (
     ASR_BACKEND,
     NEMO_ASR_MODEL,
+    NIM_ASR_MODEL,
+    NIM_ASR_URL,
     WHISPER_COMPUTE_TYPE,
     WHISPER_CPU_COMPUTE_TYPE,
     WHISPER_DEVICE,
@@ -34,6 +37,14 @@ def whisper_available() -> bool:
 
 def nemo_available() -> bool:
     return find_spec("nemo") is not None and find_spec("torch") is not None
+
+
+def nim_available() -> bool:
+    try:
+        response = httpx.get(f"{NIM_ASR_URL}/v1/health/ready", timeout=1.0)
+        return response.status_code == 200
+    except Exception:  # noqa: BLE001
+        return False
 
 
 def asr_runtime() -> dict[str, object]:
@@ -164,6 +175,45 @@ def _transcribe_with_nemo(path: str) -> str:
     return transcript.strip()
 
 
+def _transcribe_with_nim(path: str) -> str:
+    with tempfile.NamedTemporaryFile(suffix=".wav", delete=True) as wav:
+        _convert_to_wav(path, wav.name)
+        duration = _wav_duration_seconds(wav.name)
+        with open(wav.name, "rb") as audio:
+            response = httpx.post(
+                f"{NIM_ASR_URL}/v1/audio/transcriptions",
+                files={"file": ("audio.wav", audio, "audio/wav")},
+                data={"language": "en-US"},
+                timeout=120.0,
+            )
+    response.raise_for_status()
+    data = response.json()
+    transcript = (
+        data.get("text")
+        or data.get("transcript")
+        or data.get("transcription")
+        or ""
+    )
+    if not transcript and isinstance(data.get("segments"), list):
+        transcript = " ".join(
+            str(segment.get("text", "")).strip()
+            for segment in data["segments"]
+            if isinstance(segment, dict)
+        )
+
+    _runtime.update(
+        {
+            "backend": "nim",
+            "model": NIM_ASR_MODEL,
+            "device": "cuda",
+            "compute_type": "nim",
+            "fallback": False,
+            "audio_seconds": round(duration, 2),
+        }
+    )
+    return str(transcript).strip()
+
+
 def _transcribe_with_whisper(path: str) -> str:
     model = _load_whisper_model()
     segments, _info = model.transcribe(
@@ -176,19 +226,28 @@ def _transcribe_with_whisper(path: str) -> str:
 
 
 def _transcribe(path: str) -> str:
+    if ASR_BACKEND == "nim":
+        return _transcribe_with_nim(path)
     if ASR_BACKEND == "nemo":
         return _transcribe_with_nemo(path)
     if ASR_BACKEND == "whisper":
         return _transcribe_with_whisper(path)
 
+    fallback_reasons = []
+    try:
+        return _transcribe_with_nim(path)
+    except Exception as exc:  # noqa: BLE001
+        fallback_reasons.append(f"NIM unavailable: {type(exc).__name__}: {exc}")
+
     try:
         return _transcribe_with_nemo(path)
     except Exception as exc:  # noqa: BLE001
+        fallback_reasons.append(f"NeMo unavailable: {type(exc).__name__}: {exc}")
         _runtime.update(
             {
                 "backend": "whisper",
                 "fallback": True,
-                "fallback_reason": f"NeMo unavailable: {type(exc).__name__}: {exc}",
+                "fallback_reason": " | ".join(fallback_reasons),
             }
         )
         return _transcribe_with_whisper(path)

@@ -68,12 +68,15 @@ async def health() -> dict[str, object]:
         from app.voice import (
             asr_runtime as get_asr_runtime,
             nemo_available,
+            nim_available,
             whisper_available,
         )
     except Exception:  # noqa: BLE001
+        nim_ready = False
         whisper_ready = False
         nemo_ready = False
     else:
+        nim_ready = nim_available()
         whisper_ready = whisper_available()
         nemo_ready = nemo_available()
         asr_runtime = get_asr_runtime()
@@ -84,6 +87,7 @@ async def health() -> dict[str, object]:
         "ollama_model": OLLAMA_MODEL,
         "whisper_model": WHISPER_MODEL,
         "whisper_ready": whisper_ready,
+        "nim_ready": nim_ready,
         "nemo_ready": nemo_ready,
         "asr_runtime": asr_runtime,
         "cudf_ready": cudf_available(),
