@@ -84,6 +84,13 @@ See **[DEPLOY.md](./DEPLOY.md)**. Default: `~/urban-ops-copilot` on port **8080*
 - [ ] Point-on-map brief: click → reverse geocode → spatial join
 - [ ] cuDF aggregation for KSI × restriction joins at scale
 
+### Voice ASR decision (demo)
+
+- Preferred hackathon path: **NVIDIA NeMo / Parakeet ASR on PyTorch CUDA**.
+- Riva / Speech NIM is the stronger production packaging story, but it adds NGC credentials and container orchestration during the hackathon.
+- `faster-whisper` remains a fallback. On the current GX10 ARM64 environment, its CTranslate2 backend reports no CUDA support, so it may fall back to CPU.
+- Judge framing: voice stays local to Spark either way; NeMo/Parakeet is the practical NVIDIA-native GPU path for the live demo.
+
 ## Prompt contract
 
 `app/llm.py` forces three markdown sections. Do not remove headers without updating the UI copy.

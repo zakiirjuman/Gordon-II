@@ -180,7 +180,7 @@
         <h2>Ask Gordon</h2>
         <input id="question" placeholder="e.g. Traffic stop near active closure on Lawrence — what should I consider?" />
         <button id="askBtn">Ask (local Nemotron)</button>
-        <button id="voiceBtn">Tap to speak (local Whisper)</button>
+        <button id="voiceBtn">Tap to speak (local GPU ASR)</button>
         <div id="interjection"></div>
         <div id="transcript" class="latency"></div>
         <div id="answer" class="output"></div>
@@ -236,7 +236,7 @@
     function renderTimings(targetId, timings) {
       if (!timings) return;
       const parts = [];
-      if (timings.stt) parts.push(`STT ${timings.stt}ms`);
+      if (timings.stt) parts.push(`ASR ${timings.stt}ms`);
       if (timings.spatial) parts.push(`Spatial ${timings.spatial}ms`);
       if (timings.gpu_join) parts.push(`GPU ${timings.gpu_join}ms`);
       if (timings.total) parts.push(`Total ${timings.total}ms`);
@@ -373,7 +373,7 @@
 
       if (mediaRecorder && mediaRecorder.state === 'recording') {
         mediaRecorder.stop();
-        btn.textContent = 'Processing local Whisper...';
+        btn.textContent = 'Processing local ASR...';
         btn.disabled = true;
         return;
       }
@@ -404,7 +404,7 @@
           out.innerHTML = `<span class="error">${err.message}</span>`;
         } finally {
           btn.disabled = false;
-          btn.textContent = 'Tap to speak (local Whisper)';
+          btn.textContent = 'Tap to speak (local GPU ASR)';
         }
       };
       mediaRecorder.start();
