@@ -1,0 +1,5 @@
+-r requirements.txt
+
+# cuDF wheels are CUDA-version specific. Install the matching RAPIDS wheel on GX10.
+# Example for CUDA 12:
+#   pip install --extra-index-url=https://pypi.nvidia.com cudf-cu12

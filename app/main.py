@@ -1,13 +1,25 @@
 from __future__ import annotations
 
-from fastapi import FastAPI, HTTPException
+import time
+
+from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from app.config import APP_NAME, APP_TAGLINE, CORPUS_VERSION, STATIC_DIR
+from app.config import (
+    APP_NAME,
+    APP_TAGLINE,
+    CORPUS_VERSION,
+    DEFAULT_POINT_RADIUS_M,
+    OLLAMA_MODEL,
+    STATIC_DIR,
+    WHISPER_MODEL,
+)
+from app.interjection import assess_situation
 from app.legal_rag import get_corpus, retrieve_law_cards
 from app.llm import answer_question, generate_briefing, generate_patrol_brief
+from app.spatial import build_point_snapshot, cudf_available
 from app.toronto_data import (
     build_ops_snapshot,
     fetch_construction_hubs,
@@ -28,6 +40,12 @@ class AskRequest(BaseModel):
     question: str = Field(min_length=3, max_length=500)
 
 
+class PointBriefRequest(BaseModel):
+    lat: float = Field(ge=-90, le=90)
+    lng: float = Field(ge=-180, le=180)
+    radius_m: int = Field(default=DEFAULT_POINT_RADIUS_M, ge=100, le=5000)
+
+
 async def _load_snapshot() -> dict:
     restrictions = await fetch_road_restrictions()
     hubs = await fetch_construction_hubs()
@@ -44,8 +62,22 @@ async def index() -> FileResponse:
 
 
 @app.get("/api/health")
-async def health() -> dict[str, str]:
-    return {"status": "ok", "product": APP_NAME, "corpus_version": CORPUS_VERSION}
+async def health() -> dict[str, object]:
+    try:
+        from app.voice import whisper_available
+    except Exception:  # noqa: BLE001
+        whisper_ready = False
+    else:
+        whisper_ready = whisper_available()
+    return {
+        "status": "ok",
+        "product": APP_NAME,
+        "corpus_version": CORPUS_VERSION,
+        "ollama_model": OLLAMA_MODEL,
+        "whisper_model": WHISPER_MODEL,
+        "whisper_ready": whisper_ready,
+        "cudf_ready": cudf_available(),
+    }
 
 
 @app.get("/api/snapshot")
@@ -91,6 +123,33 @@ async def patrol_brief() -> dict:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
 
+@app.post("/api/patrol-brief/point")
+async def patrol_brief_point(body: PointBriefRequest) -> dict:
+    started = time.perf_counter()
+    try:
+        restrictions = await fetch_road_restrictions()
+        hubs = await fetch_construction_hubs()
+        collisions = await fetch_recent_collisions(days=365)
+        snapshot = build_point_snapshot(
+            lat=body.lat,
+            lng=body.lng,
+            radius_m=body.radius_m,
+            restrictions=restrictions,
+            hubs=hubs,
+            collisions=collisions,
+        )
+        snapshot["product"] = APP_NAME
+        snapshot["corpus_version"] = CORPUS_VERSION
+        result = await generate_patrol_brief(snapshot)
+        timings = {
+            **snapshot.get("timings_ms", {}),
+            "total": round((time.perf_counter() - started) * 1000),
+        }
+        return {**result, "snapshot": snapshot, "timings_ms": timings}
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
 @app.post("/api/briefing")
 async def briefing() -> dict[str, str]:
     try:
@@ -106,6 +165,32 @@ async def briefing() -> dict[str, str]:
 async def ask(body: AskRequest) -> dict:
     try:
         snapshot = await _load_snapshot()
-        return await answer_question(body.question, snapshot)
+        interjection = assess_situation(body.question, snapshot)
+        result = await answer_question(body.question, snapshot, interjection=interjection)
+        return {**result, "interjection": interjection.to_dict()}
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@app.post("/api/voice/ask")
+async def voice_ask(audio: UploadFile = File(...)) -> dict:
+    try:
+        from app.voice import transcribe_upload
+
+        started = time.perf_counter()
+        transcript, stt_ms = await transcribe_upload(audio)
+        snapshot = await _load_snapshot()
+        interjection = assess_situation(transcript, snapshot)
+        result = await answer_question(transcript, snapshot, interjection=interjection)
+        timings = {
+            "stt": stt_ms,
+            "total": round((time.perf_counter() - started) * 1000),
+        }
+        return {
+            "transcript": transcript,
+            **result,
+            "interjection": interjection.to_dict(),
+            "timings_ms": timings,
+        }
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=502, detail=str(exc)) from exc
