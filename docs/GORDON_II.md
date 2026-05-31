@@ -104,6 +104,7 @@ System rules baked in:
 
 ## Hackathon narrative
 
+- **Judges:** see **[JUDGING.md](./JUDGING.md)** for model choices, two-service deployment, and demo beats.
 - **Track:** Urban Operations + public safety angle  
 - **Toronto data:** ArcGIS RODARS layer 77, construction 71, KSI CSV (12mo window in code)  
 - **NVIDIA:** Local Nemotron on 121GB unified memory; corpus RAG on Spark; room to add cuDF / NIM  
