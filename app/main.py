@@ -19,6 +19,7 @@ from app.config import (
     STATIC_DIR,
     WHISPER_MODEL,
 )
+from app.embeddings import rag_status
 from app.interaction_pipeline import process_interaction_recording
 from app.interaction_store import get_session, list_sessions
 from app.interjection import assess_situation
@@ -91,6 +92,7 @@ async def health() -> dict[str, object]:
         "product": APP_NAME,
         "corpus_version": CORPUS_VERSION,
         "ollama_model": OLLAMA_MODEL,
+        **rag_status(),
         "whisper_model": WHISPER_MODEL,
         "whisper_ready": whisper_ready,
         "nim_ready": nim_ready,

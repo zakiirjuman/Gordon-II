@@ -20,7 +20,8 @@ app/
   main.py           # FastAPI routes
   config.py         # APP_NAME, corpus version, GIS URLs, Ollama model
   toronto_data.py   # Ingest + snapshot aggregation
-  legal_rag.py      # Load corpus, keyword retrieval (hackathon RAG v1)
+  legal_rag.py      # Load corpus, semantic + keyword retrieval (RAG v2)
+  embeddings.py     # Ollama embed index + cosine retrieval
   llm.py            # Nemotron prompts (three-section patrol brief)
   corpus/*.md       # Law/policy cards (frontmatter + body)
   static/index.html # Leaflet UI
@@ -64,11 +65,13 @@ See **[DEPLOY.md](./DEPLOY.md)**. Default: `~/urban-ops-copilot` on port **8080*
 
 **Release RAM when done:** `fuser -k 8080/tcp` on the Spark (port-scoped only).
 
-## Law corpus (RAG v1)
+## Law corpus (RAG)
 
 - Cards live in `app/corpus/*.md` with YAML frontmatter (`id`, `title`, `category`, `source`, `tags`).
 - Categories: `lookout`, `authority`, `do_not`.
-- Retrieval: `app/legal_rag.py` — keyword overlap + ensure at least one `do_not` and `authority` card when possible.
+- Retrieval: `app/legal_rag.py` + `app/embeddings.py` — **Ollama embeddings** (cosine top-k) with keyword overlap fallback when embed model or index is unavailable.
+- Guardrails: ensure at least one `do_not` and `authority` card when possible (same as v1).
+- Index cache: `data/embeddings/law_cards.json` (keyed by `CORPUS_VERSION` + `OLLAMA_EMBED_MODEL`).
 - Bump `CORPUS_VERSION` in `app/config.py` when cards change.
 
 ### Add a new card
@@ -77,9 +80,9 @@ See **[DEPLOY.md](./DEPLOY.md)**. Default: `~/urban-ops-copilot` on port **8080*
 2. Bump `CORPUS_VERSION`.
 3. Test: `GET /api/corpus` and `POST /api/patrol-brief`.
 
-### RAG v2 (next agent — suggested)
+### RAG v2 (embedding path)
 
-- [ ] Ollama embedding model + vector store on Spark
+- [x] Ollama embedding model (`OLLAMA_EMBED_MODEL`, e.g. `nomic-embed-text`) + cached JSON index on Spark
 - [ ] NeMo Retriever or NVIDIA NIM embeddings
 - [ ] Point-on-map brief: click → reverse geocode → spatial join
 - [ ] cuDF aggregation for KSI × restriction joins at scale
@@ -127,7 +130,7 @@ System rules baked in:
 
 - Law cards are **curated training summaries**, not a live statute database.
 - KSI CSV may lag; not all collisions are last 90 days (see `fetch_recent_collisions(days=365)`).
-- Keyword RAG is simple; legal retrieval quality improves with embeddings.
+- Keyword fallback remains when embeddings are unavailable; `/api/health` reports `rag_mode` and embed model status.
 - `/api/briefing` vs `/api/patrol-brief` — prefer patrol-brief for full `law_context`.
 
 ## For the next agent — first message template

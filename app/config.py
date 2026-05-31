@@ -8,7 +8,7 @@ INTERACTIONS_DIR = BASE_DIR.parent / "data" / "interactions"
 
 APP_NAME = "Gordon II"
 APP_TAGLINE = "Lawful patrol intelligence — not Batman."
-CORPUS_VERSION = "gordon-ii-0.2"
+CORPUS_VERSION = "gordon-ii-0.3"
 
 GIS_BASE = "https://gis.toronto.ca/arcgis/rest/services/cot_geospatial2/FeatureServer"
 ROAD_RESTRICTIONS_LAYER = 77
@@ -23,6 +23,9 @@ KSI_COLLISIONS_CSV = (
 
 OLLAMA_URL = "http://127.0.0.1:11434"
 OLLAMA_MODEL = "nemotron3:33b"
+OLLAMA_EMBED_MODEL = "nomic-embed-text"
+EMBED_INDEX_PATH = BASE_DIR.parent / "data" / "embeddings" / "law_cards.json"
+RAG_MODE = "auto"  # auto | embeddings | keyword
 
 CACHE_TTL_SECONDS = 300
 

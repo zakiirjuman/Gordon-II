@@ -20,6 +20,7 @@ data/*.json
 data/*.csv
 data/interactions/
 data/officers/
+data/embeddings/
 
 # Editors
 .idea/
