@@ -17,6 +17,8 @@ node_modules/
 # Data (large files — fetch separately)
 data/*.json
 data/*.csv
+data/interactions/
+data/officers/
 
 # Editors
 .idea/

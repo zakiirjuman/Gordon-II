@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import tempfile
 import time
+from pathlib import Path
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -11,14 +13,18 @@ from app.config import (
     APP_NAME,
     APP_TAGLINE,
     CORPUS_VERSION,
+    DEFAULT_OFFICER_ID,
     DEFAULT_POINT_RADIUS_M,
     OLLAMA_MODEL,
     STATIC_DIR,
     WHISPER_MODEL,
 )
+from app.interaction_pipeline import process_interaction_recording
+from app.interaction_store import get_session, list_sessions
 from app.interjection import assess_situation
 from app.legal_rag import get_corpus, retrieve_law_cards
 from app.llm import answer_question, generate_briefing, generate_patrol_brief
+from app.officer import get_officer_profile
 from app.spatial import build_point_snapshot, cudf_available
 from app.toronto_data import (
     build_ops_snapshot,
@@ -91,7 +97,17 @@ async def health() -> dict[str, object]:
         "nemo_ready": nemo_ready,
         "asr_runtime": asr_runtime,
         "cudf_ready": cudf_available(),
+        "gpu_interaction_ready": _gpu_interaction_ready(),
     }
+
+
+def _gpu_interaction_ready() -> bool:
+    try:
+        from app.interaction_gpu import gpu_interaction_available
+
+        return gpu_interaction_available()
+    except Exception:  # noqa: BLE001
+        return False
 
 
 @app.get("/api/snapshot")
@@ -208,3 +224,57 @@ async def voice_ask(audio: UploadFile = File(...)) -> dict:
         }
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@app.get("/api/interactions")
+async def interactions_index() -> dict:
+    return {"sessions": list_sessions(limit=20)}
+
+
+@app.get("/api/interactions/{session_id}")
+async def interactions_detail(session_id: str) -> dict:
+    session = get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Interaction session not found.")
+    return session
+
+
+@app.get("/api/officer/{officer_id}/stars")
+async def officer_stars(officer_id: str) -> dict:
+    return get_officer_profile(officer_id)
+
+
+@app.post("/api/interaction/evaluate")
+async def interaction_evaluate(
+    audio: UploadFile = File(...),
+    officer_id: str = Form(default=DEFAULT_OFFICER_ID),
+) -> dict:
+    suffix = Path(audio.filename or "interaction.webm").suffix or ".webm"
+    payload = await audio.read()
+    if not payload:
+        raise HTTPException(status_code=400, detail="Audio upload was empty.")
+    if len(payload) < 5000:
+        raise HTTPException(
+            status_code=400,
+            detail="Recording too short. Capture at least a few seconds of dialogue.",
+        )
+
+    tmp_path = ""
+    try:
+        with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
+            tmp.write(payload)
+            tmp.flush()
+            tmp_path = tmp.name
+        snapshot = await _load_snapshot()
+        return await process_interaction_recording(
+            tmp_path,
+            officer_id=officer_id.strip() or DEFAULT_OFFICER_ID,
+            snapshot=snapshot,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    finally:
+        if tmp_path:
+            Path(tmp_path).unlink(missing_ok=True)
