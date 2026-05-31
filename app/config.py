@@ -3,6 +3,8 @@ from pathlib import Path
 BASE_DIR = Path(__file__).resolve().parent
 STATIC_DIR = BASE_DIR / "static"
 CORPUS_DIR = BASE_DIR / "corpus"
+DATA_DIR = BASE_DIR.parent / "data" / "officers"
+INTERACTIONS_DIR = BASE_DIR.parent / "data" / "interactions"
 
 APP_NAME = "Gordon II"
 APP_TAGLINE = "Lawful patrol intelligence — not Batman."
@@ -36,3 +38,8 @@ WHISPER_MODEL = "distil-large-v3"
 WHISPER_DEVICE = "cuda"
 WHISPER_COMPUTE_TYPE = "float16"
 WHISPER_CPU_COMPUTE_TYPE = "int8"
+
+SPEAKER_MATCH_THRESHOLD = 0.72
+SPEAKER_CLUSTER_THRESHOLD = 0.68
+VOICE_WAKE_TERMS = ("gordon", "hey gordon", "ok gordon")
+DEFAULT_OFFICER_ID = "device-officer"

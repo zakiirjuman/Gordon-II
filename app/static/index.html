@@ -128,6 +128,30 @@
       margin: 0.6rem 0;
       font-size: 0.85rem;
     }
+    .recording {
+      border: 1px solid rgba(255,143,143,0.55);
+      background: rgba(255,143,143,0.12);
+      color: #ffc9c9;
+      border-radius: 10px;
+      padding: 0.65rem 0.75rem;
+      margin: 0.6rem 0;
+      font-size: 0.85rem;
+    }
+    .session-list {
+      list-style: none;
+      padding: 0;
+      margin: 0.5rem 0 0;
+    }
+    .session-list li {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.55rem 0.65rem;
+      margin-bottom: 0.45rem;
+      font-size: 0.8rem;
+      color: var(--muted);
+      cursor: pointer;
+    }
+    .session-list li:hover { border-color: var(--accent); color: var(--text); }
     .hint { color: var(--muted); font-size: 0.78rem; line-height: 1.4; }
     .disclaimer {
       font-size: 0.72rem;
@@ -188,6 +212,18 @@
       </section>
 
       <section class="panel">
+        <h2>Encounter review</h2>
+        <p class="hint">Record a multi-minute exchange. Gordon separates speakers, infers who is the officer, and awards a private star only for strong work. Stored locally on Spark for review.</p>
+        <input id="officerId" placeholder="Officer device ID (optional)" />
+        <button id="encounterBtn">Start encounter recording</button>
+        <div id="encounterStatus"></div>
+        <div id="encounterResult" class="output"></div>
+        <div id="encounterLatency" class="latency"></div>
+        <p class="hint" id="encounterEngine"></p>
+        <ul class="session-list" id="sessionList"></ul>
+      </section>
+
+      <section class="panel">
         <h2>Hot corridors</h2>
         <ul class="compact" id="topRoads"></ul>
       </section>
@@ -232,6 +268,23 @@
     let selectedMarker = null;
     let mediaRecorder = null;
     let audioChunks = [];
+    let encounterRecorder = null;
+    let encounterChunks = [];
+    let encounterStartedAt = null;
+    let encounterTimer = null;
+
+    const OFFICER_ID_KEY = 'gordon-officer-id';
+
+    function getOfficerId() {
+      const input = document.getElementById('officerId').value.trim();
+      const stored = localStorage.getItem(OFFICER_ID_KEY) || 'device-officer';
+      return input || stored;
+    }
+
+    function persistOfficerId() {
+      const value = document.getElementById('officerId').value.trim();
+      if (value) localStorage.setItem(OFFICER_ID_KEY, value);
+    }
 
     function renderTimings(targetId, timings) {
       if (!timings) return;
@@ -242,6 +295,72 @@
       if (timings.total) parts.push(`Total ${timings.total}ms`);
       parts.push('gx10-ready');
       document.getElementById(targetId).textContent = parts.join(' · ');
+    }
+
+    function renderEncounterResult(data) {
+      const box = document.getElementById('encounterResult');
+      const evalData = data.evaluation || {};
+      const starLine = data.star
+        ? `\n\n★ STAR AWARDED (${data.star.star_count} total)\n${data.star.latest?.message || ''}`
+        : '\n\nNo star awarded (silent on mediocre conduct).';
+      const dangerLine = evalData.danger
+        ? `\n\n⚠ ${evalData.danger_message || 'Review escalation risk.'}`
+        : '';
+      box.textContent =
+        `Officer speaker: ${evalData.officer_speaker || '?'}\n` +
+        `Intent: ${evalData.officer_intent_summary || '—'}\n` +
+        `Rationale: ${evalData.rationale || '—'}` +
+        starLine +
+        dangerLine +
+        `\n\n--- Diarized transcript ---\n${data.diarized_transcript || ''}`;
+      renderTimings('encounterLatency', data.timings_ms);
+      const engine = data.diarization_engine || {};
+      document.getElementById('encounterEngine').textContent =
+        engine.speaker_model
+          ? `GPU diarization: ${engine.speaker_model} + Parakeet on ${engine.device || 'cuda'}`
+          : `CPU fallback diarization (${engine.clustering || 'fingerprint'})`;
+      loadSessions();
+      loadStarCount();
+    }
+
+    async function loadStarCount() {
+      const officerId = getOfficerId();
+      try {
+        const res = await fetch(`/api/officer/${encodeURIComponent(officerId)}/stars`);
+        const data = await res.json();
+        const stat = document.getElementById('starStat');
+        if (stat) stat.textContent = data.star_count ?? 0;
+      } catch (_) {
+        /* ignore */
+      }
+    }
+
+    async function loadSessions() {
+      const list = document.getElementById('sessionList');
+      try {
+        const res = await fetch('/api/interactions');
+        const data = await res.json();
+        const sessions = data.sessions || [];
+        if (!sessions.length) {
+          list.innerHTML = '<li>No saved encounters yet.</li>';
+          return;
+        }
+        list.innerHTML = sessions.map(session => `
+          <li data-session-id="${session.session_id}">
+            ${session.saved_at || '—'} · ${session.duration_s || '?'}s · ${session.turn_count || 0} turns
+            ${session.star_awarded ? ' · ★' : ''}
+          </li>
+        `).join('');
+        list.querySelectorAll('li[data-session-id]').forEach(item => {
+          item.addEventListener('click', async () => {
+            const id = item.getAttribute('data-session-id');
+            const detail = await fetch(`/api/interactions/${id}`).then(r => r.json());
+            renderEncounterResult(detail);
+          });
+        });
+      } catch (err) {
+        list.innerHTML = `<li class="error">${err.message}</li>`;
+      }
     }
 
     function renderInterjection(interjection) {
@@ -277,7 +396,7 @@
       document.getElementById('stats').innerHTML = `
         <div class="stat"><div class="label">Restrictions</div><div class="value">${snapshot.counts.active_road_restrictions}</div></div>
         <div class="stat"><div class="label">Construction</div><div class="value">${snapshot.counts.construction_hubs}</div></div>
-        <div class="stat"><div class="label">KSI (12mo)</div><div class="value">${snapshot.counts.recent_ksi_collisions_12mo}</div></div>
+        <div class="stat"><div class="label">Stars</div><div class="value" id="starStat">—</div></div>
       `;
 
       document.getElementById('topRoads').innerHTML = snapshot.top_restricted_roads
@@ -292,6 +411,9 @@
 
       const bounds = restrictionLayer.getBounds();
       if (bounds.isValid()) map.fitBounds(bounds.pad(0.08));
+      document.getElementById('officerId').value = localStorage.getItem(OFFICER_ID_KEY) || '';
+      loadSessions();
+      loadStarCount();
     }
 
     async function postJson(url, body) {
@@ -409,6 +531,62 @@
       };
       mediaRecorder.start();
       btn.textContent = 'Stop and ask Gordon';
+    });
+
+    document.getElementById('encounterBtn').addEventListener('click', async () => {
+      const btn = document.getElementById('encounterBtn');
+      const status = document.getElementById('encounterStatus');
+      const result = document.getElementById('encounterResult');
+
+      if (encounterRecorder && encounterRecorder.state === 'recording') {
+        encounterRecorder.stop();
+        btn.disabled = true;
+        btn.textContent = 'Evaluating on Spark...';
+        status.innerHTML = '<div class="recording">Processing encounter (diarize → transcribe → Nemotron). This may take a few minutes.</div>';
+        return;
+      }
+
+      if (!navigator.mediaDevices || !window.MediaRecorder) {
+        status.innerHTML = '<span class="error">Browser microphone recording is not available.</span>';
+        return;
+      }
+
+      persistOfficerId();
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      encounterChunks = [];
+      encounterRecorder = new MediaRecorder(stream);
+      encounterRecorder.ondataavailable = event => encounterChunks.push(event.data);
+      encounterRecorder.onstop = async () => {
+        stream.getTracks().forEach(track => track.stop());
+        clearInterval(encounterTimer);
+        const blob = new Blob(encounterChunks, { type: 'audio/webm' });
+        const form = new FormData();
+        form.append('audio', blob, 'encounter.webm');
+        form.append('officer_id', getOfficerId());
+        result.textContent = '';
+        try {
+          const res = await fetch('/api/interaction/evaluate', { method: 'POST', body: form });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.detail || res.statusText);
+          status.innerHTML = '<div class="star">Encounter saved locally on Spark.</div>';
+          renderEncounterResult(data);
+        } catch (err) {
+          status.innerHTML = `<span class="error">${err.message}</span>`;
+        } finally {
+          btn.disabled = false;
+          btn.textContent = 'Start encounter recording';
+          encounterStartedAt = null;
+        }
+      };
+
+      encounterStartedAt = Date.now();
+      encounterRecorder.start(1000);
+      btn.textContent = 'End encounter & evaluate';
+      status.innerHTML = '<div class="recording">Recording encounter… speak naturally with the other person.</div>';
+      encounterTimer = setInterval(() => {
+        const elapsed = Math.floor((Date.now() - encounterStartedAt) / 1000);
+        status.innerHTML = `<div class="recording">Recording encounter… ${elapsed}s elapsed</div>`;
+      }, 1000);
     });
 
     loadData().catch(err => {

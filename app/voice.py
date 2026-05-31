@@ -253,19 +253,45 @@ def _transcribe(path: str) -> str:
         return _transcribe_with_whisper(path)
 
 
-async def transcribe_upload(audio: UploadFile) -> tuple[str, int]:
-    started = time.perf_counter()
+def transcribe_file(path: str) -> str:
+    return _transcribe(path)
+
+
+async def prepare_upload_wav(audio: UploadFile) -> tuple[str, str]:
+    """Save upload to a temp wav file. Caller must delete both returned paths."""
     suffix = Path(audio.filename or "audio.webm").suffix or ".webm"
     payload = await audio.read()
     if not payload:
         raise ValueError("Audio upload was empty.")
 
-    with tempfile.NamedTemporaryFile(suffix=suffix, delete=True) as tmp:
-        tmp.write(payload)
-        tmp.flush()
-        transcript = _transcribe(tmp.name)
+    src = tempfile.NamedTemporaryFile(suffix=suffix, delete=False)
+    wav = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
+    try:
+        src.write(payload)
+        src.flush()
+        src.close()
+        wav.close()
+        _convert_to_wav(src.name, wav.name)
+    except Exception:
+        Path(src.name).unlink(missing_ok=True)
+        Path(wav.name).unlink(missing_ok=True)
+        raise
+    finally:
+        Path(src.name).unlink(missing_ok=True)
+    return wav.name, suffix
 
+
+async def transcribe_wav_file(wav_path: str) -> tuple[str, int]:
+    started = time.perf_counter()
+    transcript = _transcribe(wav_path)
     if not transcript:
         raise ValueError("No speech detected.")
-
     return transcript, round((time.perf_counter() - started) * 1000)
+
+
+async def transcribe_upload(audio: UploadFile) -> tuple[str, int]:
+    wav_path, _suffix = await prepare_upload_wav(audio)
+    try:
+        return await transcribe_wav_file(wav_path)
+    finally:
+        Path(wav_path).unlink(missing_ok=True)

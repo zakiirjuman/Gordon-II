@@ -92,6 +92,13 @@ See **[DEPLOY.md](./DEPLOY.md)**. Default: `~/urban-ops-copilot` on port **8080*
 - Last-resort fallback: `faster-whisper` CPU. On the current GX10 ARM64 environment, its CTranslate2 backend reports no CUDA support.
 - Judge framing: voice stays local to Spark; the ASR stack prefers NVIDIA GPU services and degrades safely if the GPU ASR service is unavailable.
 
+### Encounter review (interaction stars)
+
+- Record a multi-minute exchange from the UI → `POST /api/interaction/evaluate`.
+- Pipeline: **silence split** → **Parakeet per turn** → **voice fingerprint clustering** (Speaker 1 / 2) → **Nemotron JSON rubric** (infer officer, star/silent, rationale).
+- Sessions stored locally under `data/interactions/`; stars (with officer transcript excerpts) under `data/officers/`.
+- Demo-grade diarization (not forensic speaker ID). No enrollment API required — officer inferred from dialogue.
+
 ## Prompt contract
 
 `app/llm.py` forces three markdown sections. Do not remove headers without updating the UI copy.
