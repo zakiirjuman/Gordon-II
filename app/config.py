@@ -32,6 +32,10 @@ CACHE_TTL_SECONDS = 300
 DEFAULT_POINT_RADIUS_M = 500
 MOCK_BACKUP_ETA_MINUTES = 8
 
+NOMINATIM_URL = "https://nominatim.openstreetmap.org/reverse"
+NOMINATIM_TIMEOUT_S = 4.0
+GEOCODE_CACHE_SIZE = 128
+
 ASR_BACKEND = "auto"
 NIM_ASR_URL = "http://127.0.0.1:8010"
 NIM_ASR_MODEL = "parakeet-tdt-0.6b-v3"

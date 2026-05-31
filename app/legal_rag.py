@@ -94,6 +94,11 @@ def build_query_from_snapshot(snapshot: dict[str, Any], question: str | None = N
             str(row.get(k, ""))
             for k in ("road", "location", "type", "issue", "description")
         )
+    location = snapshot.get("location") or {}
+    for key in ("label", "road", "neighbourhood", "city", "display_name"):
+        value = location.get(key)
+        if value:
+            parts.append(str(value))
     return " ".join(parts)
 
 
