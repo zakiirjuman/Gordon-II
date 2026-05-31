@@ -99,6 +99,24 @@ def build_query_from_snapshot(snapshot: dict[str, Any], question: str | None = N
         value = location.get(key)
         if value:
             parts.append(str(value))
+    ward = snapshot.get("ward") or {}
+    for key in ("name", "code"):
+        value = ward.get(key)
+        if value:
+            parts.append(str(value))
+    for row in snapshot.get("sample_schools", [])[:4]:
+        parts.append(str(row.get("name", "")))
+        parts.append(str(row.get("type", "")))
+    for row in snapshot.get("sample_fire_stations", [])[:4]:
+        for key in ("station", "address", "ward_name"):
+            value = row.get(key)
+            if value:
+                parts.append(str(value))
+    for row in snapshot.get("nearest_simulated_units", [])[:3]:
+        for key in ("unit_type", "label"):
+            value = row.get(key)
+            if value:
+                parts.append(str(value))
     return " ".join(parts)
 
 

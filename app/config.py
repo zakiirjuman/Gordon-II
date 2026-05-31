@@ -8,11 +8,24 @@ INTERACTIONS_DIR = BASE_DIR.parent / "data" / "interactions"
 
 APP_NAME = "Gordon II"
 APP_TAGLINE = "Lawful patrol intelligence — not Batman."
-CORPUS_VERSION = "gordon-ii-0.3"
+CORPUS_VERSION = "gordon-ii-0.4"
 
 GIS_BASE = "https://gis.toronto.ca/arcgis/rest/services/cot_geospatial2/FeatureServer"
+CITY_WARDS_LAYER = 0
 ROAD_RESTRICTIONS_LAYER = 77
 CONSTRUCTION_HUBS_LAYER = 71
+
+FIRE_STATIONS_GEOJSON = (
+    "https://ckan0.cf.opendata.inter.prod-toronto.ca/dataset/"
+    "a6ce5495-8e2b-421a-ab11-964569416f31/resource/"
+    "4a9bb96b-da5e-4c67-aaf4-3f8f4f311430/download/fire-station-locations-4326.geojson"
+)
+SCHOOLS_GEOJSON = (
+    "https://ckan0.cf.opendata.inter.prod-toronto.ca/dataset/"
+    "1a714b5c-64c0-4cdf-9739-0086f80fb3ee/resource/"
+    "f1160f3f-a651-40ed-914e-07b670ac5aec/download/"
+    "school-locations-all-types-data-4326.geojson"
+)
 
 KSI_COLLISIONS_CSV = (
     "https://ckan0.cf.opendata.inter.prod-toronto.ca/dataset/"

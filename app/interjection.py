@@ -59,11 +59,28 @@ def assess_situation(
         stress_score += 1
 
     if "backup" in text or stress_score >= 5:
+        nearest = snapshot.get("nearest_simulated_units") or []
+        police_units = [unit for unit in nearest if unit.get("unit_type") == "police"]
+        backup_unit = police_units[0] if police_units else (nearest[0] if nearest else None)
+        backup_eta = (
+            backup_unit.get("eta_minutes", MOCK_BACKUP_ETA_MINUTES)
+            if backup_unit
+            else MOCK_BACKUP_ETA_MINUTES
+        )
+        backup_label = backup_unit.get("label") if backup_unit else "Nearest backup"
+        simulated_note = (
+            " (simulated demo resource, not live CAD)"
+            if backup_unit and backup_unit.get("simulated")
+            else ""
+        )
         return Interjection(
             level="danger",
             stress_score=stress_score,
-            backup_eta_minutes=MOCK_BACKUP_ETA_MINUTES,
-            message=f"Nearest backup estimate: {MOCK_BACKUP_ETA_MINUTES} min. Slow the sequence down.",
+            backup_eta_minutes=backup_eta,
+            message=(
+                f"{backup_label}: estimated {backup_eta} min{simulated_note}. "
+                "Slow the sequence down."
+            ),
         )
 
     if any(term in text for term in PRAISE_TERMS):
