@@ -97,20 +97,17 @@ def build_query_from_snapshot(snapshot: dict[str, Any], question: str | None = N
     return " ".join(parts)
 
 
-def retrieve_law_cards(
-    snapshot: dict[str, Any],
-    question: str | None = None,
-    *,
-    top_k: int = 6,
-    min_per_category: int = 1,
-) -> list[LawCard]:
-    query_tokens = _tokenize(build_query_from_snapshot(snapshot, question))
-    ranked = sorted(
-        get_corpus(),
-        key=lambda card: _score_card(card, query_tokens),
-        reverse=True,
-    )
+def _corpus_embed_inputs() -> list[tuple[str, str, str, tuple[str, ...]]]:
+    return [(c.card_id, c.title, c.body, c.tags) for c in get_corpus()]
 
+
+def _select_with_guardrails(
+    ranked: list[LawCard],
+    score_fn,
+    *,
+    top_k: int,
+    skip_zero_after_first: bool,
+) -> list[LawCard]:
     selected: list[LawCard] = []
     seen_ids: set[str] = set()
     categories_seen: set[str] = set()
@@ -118,7 +115,7 @@ def retrieve_law_cards(
     for card in ranked:
         if card.card_id in seen_ids:
             continue
-        if _score_card(card, query_tokens) <= 0 and categories_seen:
+        if skip_zero_after_first and score_fn(card) <= 0 and categories_seen:
             continue
         selected.append(card)
         seen_ids.add(card.card_id)
@@ -137,6 +134,81 @@ def retrieve_law_cards(
                 break
 
     return selected[:top_k]
+
+
+def _retrieve_law_cards_keyword(
+    snapshot: dict[str, Any],
+    question: str | None,
+    *,
+    top_k: int,
+) -> list[LawCard]:
+    query_tokens = _tokenize(build_query_from_snapshot(snapshot, question))
+    corpus = get_corpus()
+    ranked = sorted(
+        corpus,
+        key=lambda card: _score_card(card, query_tokens),
+        reverse=True,
+    )
+    return _select_with_guardrails(
+        ranked,
+        lambda card: _score_card(card, query_tokens),
+        top_k=top_k,
+        skip_zero_after_first=True,
+    )
+
+
+def _retrieve_law_cards_embeddings(
+    snapshot: dict[str, Any],
+    question: str | None,
+    *,
+    top_k: int,
+) -> list[LawCard] | None:
+    from app.embeddings import get_embed_index, score_cards_by_embedding, set_last_rag_mode
+
+    corpus = get_corpus()
+    index = get_embed_index(_corpus_embed_inputs())
+    if index is None:
+        return None
+
+    query = build_query_from_snapshot(snapshot, question)
+    scores = score_cards_by_embedding(query, index)
+    if not scores:
+        return None
+
+    ranked = sorted(
+        corpus,
+        key=lambda card: scores.get(card.card_id, 0.0),
+        reverse=True,
+    )
+    selected = _select_with_guardrails(
+        ranked,
+        lambda card: scores.get(card.card_id, 0.0),
+        top_k=top_k,
+        skip_zero_after_first=False,
+    )
+    set_last_rag_mode("embeddings")
+    return selected
+
+
+def retrieve_law_cards(
+    snapshot: dict[str, Any],
+    question: str | None = None,
+    *,
+    top_k: int = 6,
+    min_per_category: int = 1,
+) -> list[LawCard]:
+    del min_per_category  # guardrails always ensure category coverage when possible
+    from app.config import RAG_MODE
+    from app.embeddings import set_last_rag_mode
+
+    if RAG_MODE != "keyword":
+        embedded = _retrieve_law_cards_embeddings(snapshot, question, top_k=top_k)
+        if embedded is not None:
+            return embedded
+
+    cards = _retrieve_law_cards_keyword(snapshot, question, top_k=top_k)
+    set_last_rag_mode("keyword")
+    return cards
 
 
 def format_law_context(cards: list[LawCard]) -> str:
