@@ -179,8 +179,8 @@ Judges' technical reference: **[docs/JUDGING.md](docs/JUDGING.md)**
 
 ## Team
 
-| Name | Role |
+| Name | Email |
 |------|------|
-| Zakiir Juman | Lead Engineer |
-| Leon Lo | Product & Business Impact |
-| Tushar Roya | Design & Product |
+| Zakiir Juman | zakiir@schulich.yorku.ca |
+| Leon Lo | leonlo@schulich.yorku.ca |
+| Tushar Sroya | tsroya@schulich.yorku.ca |
