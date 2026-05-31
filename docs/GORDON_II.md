@@ -7,7 +7,7 @@
 
 | Pillar | Source | Output section |
 |--------|--------|----------------|
-| **Lookout** | Toronto open data (ArcGIS restrictions, construction, KSI collisions) | `## Lookout` |
+| **Lookout** | Toronto open data (ArcGIS restrictions, construction, KSI collisions, wards, schools, fire stations) + **simulated demo units** | `## Lookout` |
 | **Authority & policy** | Curated law cards in `app/corpus/*.md` (RAG) | `## Authority & policy` |
 | **Do not** | Cards tagged `do_not` + prompt guardrails | `## Do not` |
 
@@ -20,6 +20,8 @@ app/
   main.py           # FastAPI routes
   config.py         # APP_NAME, corpus version, GIS URLs, Ollama model
   toronto_data.py   # Ingest + snapshot aggregation
+  spatial.py        # Point-radius joins (Python haversine)
+  simulated_units.py # Demo AVL markers (not live CAD)
   legal_rag.py      # Load corpus, semantic + keyword retrieval (RAG v2)
   embeddings.py     # Ollama embed index + cosine retrieval
   geocode.py        # Reverse geocode map clicks (Nominatim + cache)
@@ -45,6 +47,13 @@ scripts/
 | POST | `/api/patrol-brief/point` | Point-radius brief + `snapshot.location` label |
 | POST | `/api/briefing` | Alias (patrol brief text + `cards_used`) |
 | POST | `/api/ask` | `{ "question": "..." }` → `answer`, `law_context` |
+| GET | `/api/layers/road-restrictions` | RODARS restrictions GeoJSON |
+| GET | `/api/layers/construction-hubs` | Construction hubs GeoJSON |
+| GET | `/api/layers/city-wards` | City ward boundaries |
+| GET | `/api/layers/fire-stations` | Fire station locations |
+| GET | `/api/layers/schools` | School locations |
+| GET | `/api/layers/ksi-collisions` | KSI points (12 mo) |
+| GET | `/api/layers/simulated-units` | Demo simulated backup/fire/EMS |
 
 ## Run locally
 
@@ -118,7 +127,8 @@ System rules baked in:
 
 - **Judges:** see **[JUDGING.md](./JUDGING.md)** for model choices, two-service deployment, and demo beats.
 - **Track:** Urban Operations + public safety angle  
-- **Toronto data:** ArcGIS RODARS layer 77, construction 71, KSI CSV (12mo window in code)  
+- **Toronto data:** ArcGIS RODARS layer 77, construction 71, KSI CSV, city wards (layer 0), fire stations + schools (Open Data GeoJSON)
+- **Simulated units:** demo AVL only — clearly labeled, not live dispatch  
 - **NVIDIA:** Local Nemotron on 121GB unified memory; corpus RAG on Spark; room to add cuDF / NIM  
 
 **Elevator pitch:** *Gordon II helps officers see the street clearly and stay inside the law — cited, local, on the DGX Spark.*

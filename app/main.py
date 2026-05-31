@@ -30,10 +30,16 @@ from app.officer import get_officer_profile
 from app.spatial import build_point_snapshot, cudf_available
 from app.toronto_data import (
     build_ops_snapshot,
+    collisions_to_geojson,
+    fetch_city_wards,
     fetch_construction_hubs,
+    fetch_fire_stations,
     fetch_recent_collisions,
     fetch_road_restrictions,
+    fetch_schools,
+    load_lookout_layers,
 )
+from app.simulated_units import build_simulated_units_geojson, nearest_simulated_units
 
 app = FastAPI(
     title=APP_NAME,
@@ -55,12 +61,20 @@ class PointBriefRequest(BaseModel):
 
 
 async def _load_snapshot() -> dict:
-    restrictions = await fetch_road_restrictions()
-    hubs = await fetch_construction_hubs()
-    collisions = await fetch_recent_collisions(days=365)
-    snapshot = build_ops_snapshot(restrictions, hubs, collisions)
+    layers = await load_lookout_layers()
+    simulated = build_simulated_units_geojson()
+    snapshot = build_ops_snapshot(
+        layers["restrictions"],
+        layers["hubs"],
+        layers["collisions"],
+        layers["wards"],
+        layers["fire_stations"],
+        layers["schools"],
+    )
     snapshot["product"] = APP_NAME
     snapshot["corpus_version"] = CORPUS_VERSION
+    snapshot["nearest_simulated_units"] = nearest_simulated_units(43.6532, -79.3832, simulated)
+    snapshot["simulated_resources_disclaimer"] = simulated.get("disclaimer")
     return snapshot
 
 
@@ -128,6 +142,32 @@ async def construction_hubs() -> dict:
     return await fetch_construction_hubs()
 
 
+@app.get("/api/layers/city-wards")
+async def city_wards() -> dict:
+    return await fetch_city_wards()
+
+
+@app.get("/api/layers/fire-stations")
+async def fire_stations_layer() -> dict:
+    return await fetch_fire_stations()
+
+
+@app.get("/api/layers/schools")
+async def schools_layer() -> dict:
+    return await fetch_schools()
+
+
+@app.get("/api/layers/ksi-collisions")
+async def ksi_collisions_layer() -> dict:
+    collisions = await fetch_recent_collisions(days=365)
+    return collisions_to_geojson(collisions)
+
+
+@app.get("/api/layers/simulated-units")
+async def simulated_units_layer() -> dict:
+    return build_simulated_units_geojson()
+
+
 @app.get("/api/corpus")
 async def corpus_index() -> dict:
     cards = get_corpus()
@@ -160,17 +200,20 @@ async def patrol_brief() -> dict:
 async def patrol_brief_point(body: PointBriefRequest) -> dict:
     started = time.perf_counter()
     try:
-        restrictions = await fetch_road_restrictions()
-        hubs = await fetch_construction_hubs()
-        collisions = await fetch_recent_collisions(days=365)
+        layers = await load_lookout_layers()
+        simulated = build_simulated_units_geojson()
         location = await reverse_geocode(body.lat, body.lng)
         snapshot = build_point_snapshot(
             lat=body.lat,
             lng=body.lng,
             radius_m=body.radius_m,
-            restrictions=restrictions,
-            hubs=hubs,
-            collisions=collisions,
+            restrictions=layers["restrictions"],
+            hubs=layers["hubs"],
+            collisions=layers["collisions"],
+            wards=layers["wards"],
+            schools=layers["schools"],
+            fire_stations=layers["fire_stations"],
+            simulated_units=simulated,
         )
         snapshot["product"] = APP_NAME
         snapshot["corpus_version"] = CORPUS_VERSION

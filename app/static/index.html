@@ -61,6 +61,18 @@
       gap: 0.75rem;
       margin-bottom: 1rem;
     }
+    .layer-toggles {
+      display: grid;
+      gap: 0.35rem;
+      font-size: 0.8rem;
+      color: var(--muted);
+    }
+    .layer-toggles label {
+      display: flex;
+      align-items: center;
+      gap: 0.45rem;
+      cursor: pointer;
+    }
     .stat {
       background: rgba(255,255,255,0.03);
       border: 1px solid var(--border);
@@ -189,9 +201,21 @@
       <div class="stats" id="stats"></div>
 
       <section class="panel">
+        <h2>Map layers</h2>
+        <div class="layer-toggles">
+          <label><input type="checkbox" id="toggleWards" checked /> City wards</label>
+          <label><input type="checkbox" id="toggleSchools" checked /> Schools</label>
+          <label><input type="checkbox" id="toggleFire" checked /> Fire stations</label>
+          <label><input type="checkbox" id="toggleKsi" /> KSI collisions (12 mo)</label>
+          <label><input type="checkbox" id="toggleSimulated" checked /> Simulated backup / EMS (demo)</label>
+        </div>
+        <p class="hint">Simulated unit markers are training-only — not live CAD or dispatch.</p>
+      </section>
+
+      <section class="panel">
         <h2>Patrol brief</h2>
         <button id="briefingBtn">Generate patrol brief</button>
-        <p class="hint">Click the map to brief a 500m radius around that point.</p>
+        <p class="hint">Click the map to brief a 500m radius around that point (ward, schools, fire halls included in brief).</p>
         <div id="briefing" class="output"></div>
         <div id="briefingLatency" class="latency"></div>
         <details id="lawDetails" hidden>
@@ -244,27 +268,63 @@
     }).addTo(map);
 
     const restrictionLayer = L.geoJSON(null, {
+      interactive: false,
       style: { color: '#76b900', weight: 4, opacity: 0.85 },
-      onEachFeature: (feature, layer) => {
-        const p = feature.properties || {};
-        layer.bindPopup(`
-          <strong>${p.MAIN_ROAD || 'Road restriction'}</strong><br/>
-          ${p.ROAD_CLOSURE_TYPE || ''}<br/>
-          ${p.STATUS || ''}<br/>
-          ${(p.DESCRIPTION || '').slice(0, 180)}
-        `);
-      }
     }).addTo(map);
 
     const hubLayer = L.geoJSON(null, {
+      interactive: false,
       pointToLayer: (_, latlng) => L.circleMarker(latlng, {
         radius: 7, color: '#ffb454', fillColor: '#ffb454', fillOpacity: 0.85
       }),
-      onEachFeature: (feature, layer) => {
-        const p = feature.properties || {};
-        layer.bindPopup(`<strong>Construction hub</strong><br/>${p.NAME || p.MAIN_ROAD || ''}`);
-      }
     }).addTo(map);
+
+    const wardLayer = L.geoJSON(null, {
+      interactive: false,
+      style: { color: '#5b8cff', weight: 1.2, fillColor: '#5b8cff', fillOpacity: 0.05 },
+    }).addTo(map);
+
+    const schoolLayer = L.geoJSON(null, {
+      interactive: false,
+      pointToLayer: (_, latlng) => L.circleMarker(latlng, {
+        radius: 4, color: '#b48cff', fillColor: '#b48cff', fillOpacity: 0.75
+      }),
+    }).addTo(map);
+
+    const fireLayer = L.geoJSON(null, {
+      interactive: false,
+      pointToLayer: (_, latlng) => L.circleMarker(latlng, {
+        radius: 6, color: '#ff7a45', fillColor: '#ff7a45', fillOpacity: 0.85
+      }),
+    }).addTo(map);
+
+    const ksiLayer = L.geoJSON(null, {
+      interactive: false,
+      pointToLayer: (_, latlng) => L.circleMarker(latlng, {
+        radius: 3, color: '#ff5f5f', fillColor: '#ff5f5f', fillOpacity: 0.55
+      }),
+    });
+
+    const simulatedLayer = L.geoJSON(null, {
+      interactive: false,
+      pointToLayer: (_, latlng) => L.circleMarker(latlng, {
+        radius: 8, color: '#5ce1ff', fillColor: '#5ce1ff', fillOpacity: 0.85, weight: 2, dashArray: '4 4'
+      }),
+    }).addTo(map);
+
+    const layerMap = {
+      toggleWards: wardLayer,
+      toggleSchools: schoolLayer,
+      toggleFire: fireLayer,
+      toggleKsi: ksiLayer,
+      toggleSimulated: simulatedLayer,
+    };
+    Object.entries(layerMap).forEach(([id, layer]) => {
+      document.getElementById(id).addEventListener('change', (event) => {
+        if (event.target.checked) layer.addTo(map);
+        else map.removeLayer(layer);
+      });
+    });
 
     let selectedMarker = null;
     let mediaRecorder = null;
@@ -393,19 +453,38 @@
     }
 
     async function loadData() {
-      const [snapshot, restrictions, hubs, health] = await Promise.all([
+      const [
+        snapshot,
+        restrictions,
+        hubs,
+        health,
+        wards,
+        schools,
+        fireStations,
+        ksiCollisions,
+        simulatedUnits,
+      ] = await Promise.all([
         fetch('/api/snapshot').then(r => r.json()),
         fetch('/api/layers/road-restrictions').then(r => r.json()),
         fetch('/api/layers/construction-hubs').then(r => r.json()),
         fetch('/api/health').then(r => r.json()),
+        fetch('/api/layers/city-wards').then(r => r.json()),
+        fetch('/api/layers/schools').then(r => r.json()),
+        fetch('/api/layers/fire-stations').then(r => r.json()),
+        fetch('/api/layers/ksi-collisions').then(r => r.json()),
+        fetch('/api/layers/simulated-units').then(r => r.json()),
       ]);
 
       document.getElementById('corpusVer').textContent = health.corpus_version || '—';
       document.getElementById('ragMode').textContent = health.rag_mode || health.last_rag_mode || '—';
 
+      const counts = snapshot.counts || {};
       document.getElementById('stats').innerHTML = `
-        <div class="stat"><div class="label">Restrictions</div><div class="value">${snapshot.counts.active_road_restrictions}</div></div>
-        <div class="stat"><div class="label">Construction</div><div class="value">${snapshot.counts.construction_hubs}</div></div>
+        <div class="stat"><div class="label">Restrictions</div><div class="value">${counts.active_road_restrictions ?? '—'}</div></div>
+        <div class="stat"><div class="label">Construction</div><div class="value">${counts.construction_hubs ?? '—'}</div></div>
+        <div class="stat"><div class="label">KSI (12 mo)</div><div class="value">${counts.recent_ksi_collisions_12mo ?? '—'}</div></div>
+        <div class="stat"><div class="label">Schools</div><div class="value">${counts.schools ?? '—'}</div></div>
+        <div class="stat"><div class="label">Fire halls</div><div class="value">${counts.fire_stations ?? '—'}</div></div>
         <div class="stat"><div class="label">Stars</div><div class="value" id="starStat">—</div></div>
       `;
 
@@ -418,6 +497,16 @@
       restrictionLayer.addData(restrictions);
       hubLayer.clearLayers();
       hubLayer.addData(hubs);
+      wardLayer.clearLayers();
+      wardLayer.addData(wards);
+      schoolLayer.clearLayers();
+      schoolLayer.addData(schools);
+      fireLayer.clearLayers();
+      fireLayer.addData(fireStations);
+      ksiLayer.clearLayers();
+      ksiLayer.addData(ksiCollisions);
+      simulatedLayer.clearLayers();
+      simulatedLayer.addData(simulatedUnits);
 
       const bounds = restrictionLayer.getBounds();
       if (bounds.isValid()) map.fitBounds(bounds.pad(0.08));
@@ -467,7 +556,7 @@
     map.on('click', async (event) => {
       const { lat, lng } = event.latlng;
       if (selectedMarker) selectedMarker.remove();
-      selectedMarker = L.marker([lat, lng]).addTo(map);
+      selectedMarker = L.marker([lat, lng], { zIndexOffset: 1000 }).addTo(map);
       const out = document.getElementById('briefing');
       out.textContent = `Briefing 500m around ${lat.toFixed(5)}, ${lng.toFixed(5)} on Spark...`;
       document.getElementById('briefingLatency').textContent = '';
@@ -476,9 +565,12 @@
         const locationLabel = locationLabelFromSnapshot(data.snapshot, lat, lng);
         out.textContent = data.briefing;
         renderTimings('briefingLatency', data.timings_ms, locationLabel);
-        if (data.snapshot?.location?.label) {
-          selectedMarker.bindPopup(`<strong>${data.snapshot.location.label}</strong>`).openPopup();
-        }
+        const ward = data.snapshot?.ward;
+        const popupParts = [
+          locationLabel !== `${lat.toFixed(5)}, ${lng.toFixed(5)}` ? locationLabel : null,
+          ward?.name ? `Ward ${ward.code || ''}: ${ward.name}`.trim() : null,
+        ].filter(Boolean);
+        selectedMarker.bindPopup(`<strong>${popupParts.join('<br/>') || 'Patrol point'}</strong>`).openPopup();
         showLawContext(data.law_context);
       } catch (err) {
         out.innerHTML = `<span class="error">${err.message}</span>`;
