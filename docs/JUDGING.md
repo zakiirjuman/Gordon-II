@@ -16,7 +16,7 @@ The hardware story: **fast, on-device inference** for both language and speech o
 |------|--------|-----------------|
 | **Reasoning / answers** | `nemotron3:33b` via **Ollama** | Strong local LLM on Spark’s 121GB unified memory; structured patrol briefs with cited law cards. We disable internal “thinking” output (`think: false`) so responses are demo-ready. |
 | **Speech-to-text (preferred)** | **`nvidia/parakeet-tdt-0.6b-v3`** via **NeMo** | NVIDIA Parakeet TDT is built for interactive voice (better latency/accuracy tradeoff than CTC for live commands). Runs on **GB10 CUDA** in a native ARM64 container. |
-| **Law / policy context** | Curated markdown **law cards** + keyword RAG (`app/legal_rag.py`) | Hackathon-appropriate v1 retrieval; cards are tagged `lookout`, `authority`, `do_not` and cited in answers as `[card_id]`. |
+| **Law / policy context** | Curated markdown **law cards** + **Ollama embedding RAG** (`app/legal_rag.py`, `app/embeddings.py`) | Semantic top-k via `nomic-embed-text` with keyword fallback; cards tagged `lookout`, `authority`, `do_not` and cited as `[card_id]`. |
 | **Situation awareness** | Rule-based **interjection** (`app/interjection.py`) | Detects stress/escalation language and snapshot hazards; adapts tone (praise, calm guidance, backup ETA) without an officer toggling “de-escalation mode.” |
 | **ASR fallback** | `distil-large-v3` via **faster-whisper** (CPU) | Safety net if GPU ASR is down. On ARM64 Spark, CTranslate2 has **no CUDA build**, so Whisper is CPU-only — not our primary demo path. |
 
@@ -57,7 +57,7 @@ Gordon converts browser `webm` → `wav` with **`ffmpeg` on the host**, then POS
 
 ```bash
 curl http://127.0.0.1:8010/health          # Parakeet: device=cuda, gpu=NVIDIA GB10
-curl http://127.0.0.1:8080/api/health    # Gordon: nim_ready=true, asr_runtime.backend=nim
+curl http://127.0.0.1:8080/api/health    # Gordon: nim_ready=true, rag_mode=embeddings, asr_runtime.backend=nim
 ```
 
 ---
@@ -71,7 +71,11 @@ curl http://127.0.0.1:8080/api/health    # Gordon: nim_ready=true, asr_runtime.b
 # Remote: ~/urban-ops-copilot on port 8080
 ```
 
-Requires Ollama with `nemotron3:33b` and **host `ffmpeg`** (`sudo apt install ffmpeg`).
+Requires Ollama with `nemotron3:33b` and **`nomic-embed-text`** (embedding RAG) and **host `ffmpeg`** (`sudo apt install ffmpeg`).
+
+```bash
+ollama pull nomic-embed-text   # if not already present
+```
 
 ### 2. GPU ASR service
 
@@ -96,17 +100,19 @@ sudo tailscale serve --bg 8080
 
 ## Demo beats (what to show judges)
 
-1. **Map click** → point-in-radius patrol brief (spatial snapshot + Nemotron).
+1. **Map click** → reverse-geocoded point brief (500 m haversine join + Nemotron + cited law cards).
 2. **Voice command** → GPU Parakeet transcript → cited answer with interjection policy.
-3. **Health / latency** → `/api/health` shows `nim_ready`, CUDA ASR; UI shows STT + total timings.
-4. **Local & cited** → answers reference law cards and Toronto snapshot data, not cloud APIs.
+3. **Health / latency** → `/api/health` shows `nim_ready`, `rag_mode`, CUDA ASR; UI shows STT + total timings.
+4. **Local & cited** → answers reference law cards and Toronto snapshot data, not cloud LLMs for reasoning.
+5. **Encounter review** → record a two-speaker exchange → GPU diarization + Nemotron rubric → optional **star** with rationale (see [ENCOUNTER_TEST_SCRIPT.md](./ENCOUNTER_TEST_SCRIPT.md)).
 
 ---
 
 ## Honest limitations
 
 - Law cards are **curated summaries**, not a live statute database.
-- RAG v1 is keyword overlap; embeddings (NeMo Retriever / NIM) are a natural v2.
+- Map click uses **Nominatim** (OpenStreetMap) for a human-readable location label; spatial joins remain local Python haversine.
+- RAG prefers **Ollama embeddings**; keyword overlap is the fallback when the embed model or index is unavailable.
 - cuDF spatial joins are scaffolded (`app/spatial.py`); Python haversine path is live today.
 - Whisper CPU fallback exists for resilience, not for the primary GPU narrative.
 

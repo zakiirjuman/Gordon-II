@@ -20,6 +20,7 @@ from app.config import (
     WHISPER_MODEL,
 )
 from app.embeddings import rag_status
+from app.geocode import reverse_geocode
 from app.interaction_pipeline import process_interaction_recording
 from app.interaction_store import get_session, list_sessions
 from app.interjection import assess_situation
@@ -162,6 +163,7 @@ async def patrol_brief_point(body: PointBriefRequest) -> dict:
         restrictions = await fetch_road_restrictions()
         hubs = await fetch_construction_hubs()
         collisions = await fetch_recent_collisions(days=365)
+        location = await reverse_geocode(body.lat, body.lng)
         snapshot = build_point_snapshot(
             lat=body.lat,
             lng=body.lng,
@@ -172,9 +174,11 @@ async def patrol_brief_point(body: PointBriefRequest) -> dict:
         )
         snapshot["product"] = APP_NAME
         snapshot["corpus_version"] = CORPUS_VERSION
+        snapshot["location"] = location
         result = await generate_patrol_brief(snapshot)
         timings = {
             **snapshot.get("timings_ms", {}),
+            "geocode": location.get("geocode_ms"),
             "total": round((time.perf_counter() - started) * 1000),
         }
         return {**result, "snapshot": snapshot, "timings_ms": timings}

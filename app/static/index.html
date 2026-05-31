@@ -231,6 +231,7 @@
       <p class="disclaimer">
         Decision support only — not legal advice. Verify statute, service policy, and supervisor direction before acting.
         Runs locally on DGX Spark; Toronto open data + curated training cards (<span id="corpusVer">—</span>).
+        RAG: <span id="ragMode">—</span>.
       </p>
     </aside>
   </main>
@@ -286,15 +287,23 @@
       if (value) localStorage.setItem(OFFICER_ID_KEY, value);
     }
 
-    function renderTimings(targetId, timings) {
-      if (!timings) return;
+    function renderTimings(targetId, timings, locationLabel) {
+      if (!timings && !locationLabel) return;
       const parts = [];
-      if (timings.stt) parts.push(`ASR ${timings.stt}ms`);
-      if (timings.spatial) parts.push(`Spatial ${timings.spatial}ms`);
-      if (timings.gpu_join) parts.push(`GPU ${timings.gpu_join}ms`);
-      if (timings.total) parts.push(`Total ${timings.total}ms`);
+      if (locationLabel) parts.push(locationLabel);
+      if (timings?.geocode) parts.push(`Geocode ${timings.geocode}ms`);
+      if (timings?.stt) parts.push(`ASR ${timings.stt}ms`);
+      if (timings?.spatial) parts.push(`Spatial ${timings.spatial}ms`);
+      if (timings?.gpu_join) parts.push(`GPU ${timings.gpu_join}ms`);
+      if (timings?.total) parts.push(`Total ${timings.total}ms`);
       parts.push('gx10-ready');
       document.getElementById(targetId).textContent = parts.join(' · ');
+    }
+
+    function locationLabelFromSnapshot(snapshot, lat, lng) {
+      const label = snapshot?.location?.label;
+      if (label) return label;
+      return `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
     }
 
     function renderEncounterResult(data) {
@@ -392,6 +401,7 @@
       ]);
 
       document.getElementById('corpusVer').textContent = health.corpus_version || '—';
+      document.getElementById('ragMode').textContent = health.rag_mode || health.last_rag_mode || '—';
 
       document.getElementById('stats').innerHTML = `
         <div class="stat"><div class="label">Restrictions</div><div class="value">${snapshot.counts.active_road_restrictions}</div></div>
@@ -463,8 +473,12 @@
       document.getElementById('briefingLatency').textContent = '';
       try {
         const data = await postJson('/api/patrol-brief/point', { lat, lng, radius_m: 500 });
+        const locationLabel = locationLabelFromSnapshot(data.snapshot, lat, lng);
         out.textContent = data.briefing;
-        renderTimings('briefingLatency', data.timings_ms);
+        renderTimings('briefingLatency', data.timings_ms, locationLabel);
+        if (data.snapshot?.location?.label) {
+          selectedMarker.bindPopup(`<strong>${data.snapshot.location.label}</strong>`).openPopup();
+        }
         showLawContext(data.law_context);
       } catch (err) {
         out.innerHTML = `<span class="error">${err.message}</span>`;

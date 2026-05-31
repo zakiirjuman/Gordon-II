@@ -22,6 +22,7 @@ app/
   toronto_data.py   # Ingest + snapshot aggregation
   legal_rag.py      # Load corpus, semantic + keyword retrieval (RAG v2)
   embeddings.py     # Ollama embed index + cosine retrieval
+  geocode.py        # Reverse geocode map clicks (Nominatim + cache)
   llm.py            # Nemotron prompts (three-section patrol brief)
   corpus/*.md       # Law/policy cards (frontmatter + body)
   static/index.html # Leaflet UI
@@ -41,6 +42,7 @@ scripts/
 | GET | `/api/snapshot` | Toronto ops snapshot JSON |
 | GET | `/api/corpus` | List law cards (debug) |
 | POST | `/api/patrol-brief` | Full brief + `law_context` |
+| POST | `/api/patrol-brief/point` | Point-radius brief + `snapshot.location` label |
 | POST | `/api/briefing` | Alias (patrol brief text + `cards_used`) |
 | POST | `/api/ask` | `{ "question": "..." }` → `answer`, `law_context` |
 
@@ -84,7 +86,7 @@ See **[DEPLOY.md](./DEPLOY.md)**. Default: `~/urban-ops-copilot` on port **8080*
 
 - [x] Ollama embedding model (`OLLAMA_EMBED_MODEL`, e.g. `nomic-embed-text`) + cached JSON index on Spark
 - [ ] NeMo Retriever or NVIDIA NIM embeddings
-- [ ] Point-on-map brief: click → reverse geocode → spatial join
+- [x] Point-on-map brief: click → reverse geocode → spatial join (`app/geocode.py` + `POST /api/patrol-brief/point`)
 - [ ] cuDF aggregation for KSI × restriction joins at scale
 
 ### Voice ASR decision (demo)
