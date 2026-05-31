@@ -10,7 +10,7 @@ Named after **Jim Gordon**, not Batman. Decision support for patrol officers: li
 |---|---|
 | **Live demo** | https://gx10-49d1.tail935b6d.ts.net *(Tailscale HTTPS)* |
 | **Repo** | https://github.com/zakiirjuman/Gordon-II |
-| **Team** | Zakiir Juman · Leon Lo · Tushar Roya |
+| **Team** | Zakiir Juman · Leon Lo · Tushar Sroya |
 
 ---
 
