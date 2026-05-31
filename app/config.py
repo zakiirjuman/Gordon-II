@@ -6,7 +6,7 @@ CORPUS_DIR = BASE_DIR / "corpus"
 
 APP_NAME = "Gordon II"
 APP_TAGLINE = "Lawful patrol intelligence — not Batman."
-CORPUS_VERSION = "gordon-ii-0.1"
+CORPUS_VERSION = "gordon-ii-0.2"
 
 GIS_BASE = "https://gis.toronto.ca/arcgis/rest/services/cot_geospatial2/FeatureServer"
 ROAD_RESTRICTIONS_LAYER = 77
@@ -23,3 +23,16 @@ OLLAMA_URL = "http://127.0.0.1:11434"
 OLLAMA_MODEL = "nemotron3:33b"
 
 CACHE_TTL_SECONDS = 300
+
+DEFAULT_POINT_RADIUS_M = 500
+MOCK_BACKUP_ETA_MINUTES = 8
+
+ASR_BACKEND = "auto"
+NIM_ASR_URL = "http://127.0.0.1:8010"
+NIM_ASR_MODEL = "parakeet-tdt-0.6b-v3"
+NEMO_ASR_MODEL = "nvidia/parakeet-tdt-0.6b-v3"
+
+WHISPER_MODEL = "distil-large-v3"
+WHISPER_DEVICE = "cuda"
+WHISPER_COMPUTE_TYPE = "float16"
+WHISPER_CPU_COMPUTE_TYPE = "int8"

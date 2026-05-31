@@ -105,6 +105,30 @@
       color: #d8e4ff;
       margin-top: 0.75rem;
     }
+    .latency {
+      color: var(--muted);
+      font-size: 0.75rem;
+      margin-top: 0.45rem;
+    }
+    .banner {
+      border: 1px solid rgba(255,180,84,0.55);
+      background: rgba(255,180,84,0.12);
+      border-radius: 10px;
+      color: #ffe0b6;
+      padding: 0.65rem 0.75rem;
+      margin: 0.6rem 0;
+      font-size: 0.85rem;
+    }
+    .star {
+      border: 1px solid rgba(118,185,0,0.45);
+      background: rgba(118,185,0,0.12);
+      border-radius: 10px;
+      color: #c9f58b;
+      padding: 0.65rem 0.75rem;
+      margin: 0.6rem 0;
+      font-size: 0.85rem;
+    }
+    .hint { color: var(--muted); font-size: 0.78rem; line-height: 1.4; }
     .disclaimer {
       font-size: 0.72rem;
       color: var(--muted);
@@ -143,7 +167,9 @@
       <section class="panel">
         <h2>Patrol brief</h2>
         <button id="briefingBtn">Generate patrol brief</button>
+        <p class="hint">Click the map to brief a 500m radius around that point.</p>
         <div id="briefing" class="output"></div>
+        <div id="briefingLatency" class="latency"></div>
         <details id="lawDetails" hidden>
           <summary>Law cards retrieved</summary>
           <pre id="lawContext" class="output"></pre>
@@ -154,7 +180,11 @@
         <h2>Ask Gordon</h2>
         <input id="question" placeholder="e.g. Traffic stop near active closure on Lawrence — what should I consider?" />
         <button id="askBtn">Ask (local Nemotron)</button>
+        <button id="voiceBtn">Tap to speak (local GPU ASR)</button>
+        <div id="interjection"></div>
+        <div id="transcript" class="latency"></div>
         <div id="answer" class="output"></div>
+        <div id="answerLatency" class="latency"></div>
       </section>
 
       <section class="panel">
@@ -198,6 +228,41 @@
         layer.bindPopup(`<strong>Construction hub</strong><br/>${p.NAME || p.MAIN_ROAD || ''}`);
       }
     }).addTo(map);
+
+    let selectedMarker = null;
+    let mediaRecorder = null;
+    let audioChunks = [];
+
+    function renderTimings(targetId, timings) {
+      if (!timings) return;
+      const parts = [];
+      if (timings.stt) parts.push(`ASR ${timings.stt}ms`);
+      if (timings.spatial) parts.push(`Spatial ${timings.spatial}ms`);
+      if (timings.gpu_join) parts.push(`GPU ${timings.gpu_join}ms`);
+      if (timings.total) parts.push(`Total ${timings.total}ms`);
+      parts.push('gx10-ready');
+      document.getElementById(targetId).textContent = parts.join(' · ');
+    }
+
+    function renderInterjection(interjection) {
+      const box = document.getElementById('interjection');
+      box.innerHTML = '';
+      if (!interjection || interjection.level === 'silent') return;
+      if (interjection.level === 'danger') {
+        box.innerHTML = `<div class="banner"><strong>Backup first:</strong> nearest backup estimate ${interjection.backup_eta_minutes || 'unknown'} min. Slow the sequence down.</div>`;
+        return;
+      }
+      if (interjection.level === 'praise') {
+        box.innerHTML = `<div class="star">Private star: ${interjection.message || 'Strong, accountable work.'}</div>`;
+      }
+    }
+
+    function renderAnswer(data) {
+      document.getElementById('answer').textContent = data.answer;
+      renderInterjection(data.interjection);
+      renderTimings('answerLatency', data.timings_ms);
+      showLawContext(data.law_context);
+    }
 
     async function loadData() {
       const [snapshot, restrictions, hubs, health] = await Promise.all([
@@ -258,11 +323,29 @@
       try {
         const data = await postJson('/api/patrol-brief');
         out.textContent = data.briefing;
+        renderTimings('briefingLatency', data.timings_ms);
         showLawContext(data.law_context);
       } catch (err) {
         out.innerHTML = `<span class="error">${err.message}</span>`;
       } finally {
         btn.disabled = false;
+      }
+    });
+
+    map.on('click', async (event) => {
+      const { lat, lng } = event.latlng;
+      if (selectedMarker) selectedMarker.remove();
+      selectedMarker = L.marker([lat, lng]).addTo(map);
+      const out = document.getElementById('briefing');
+      out.textContent = `Briefing 500m around ${lat.toFixed(5)}, ${lng.toFixed(5)} on Spark...`;
+      document.getElementById('briefingLatency').textContent = '';
+      try {
+        const data = await postJson('/api/patrol-brief/point', { lat, lng, radius_m: 500 });
+        out.textContent = data.briefing;
+        renderTimings('briefingLatency', data.timings_ms);
+        showLawContext(data.law_context);
+      } catch (err) {
+        out.innerHTML = `<span class="error">${err.message}</span>`;
       }
     });
 
@@ -275,12 +358,57 @@
       out.textContent = 'Thinking locally on Spark...';
       try {
         const data = await postJson('/api/ask', { question });
-        out.textContent = data.answer;
+        renderAnswer(data);
       } catch (err) {
         out.innerHTML = `<span class="error">${err.message}</span>`;
       } finally {
         btn.disabled = false;
       }
+    });
+
+    document.getElementById('voiceBtn').addEventListener('click', async () => {
+      const btn = document.getElementById('voiceBtn');
+      const out = document.getElementById('answer');
+      const transcript = document.getElementById('transcript');
+
+      if (mediaRecorder && mediaRecorder.state === 'recording') {
+        mediaRecorder.stop();
+        btn.textContent = 'Processing local ASR...';
+        btn.disabled = true;
+        return;
+      }
+
+      if (!navigator.mediaDevices || !window.MediaRecorder) {
+        out.innerHTML = '<span class="error">Browser microphone recording is not available.</span>';
+        return;
+      }
+
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      audioChunks = [];
+      mediaRecorder = new MediaRecorder(stream);
+      mediaRecorder.ondataavailable = event => audioChunks.push(event.data);
+      mediaRecorder.onstop = async () => {
+        stream.getTracks().forEach(track => track.stop());
+        const blob = new Blob(audioChunks, { type: 'audio/webm' });
+        const form = new FormData();
+        form.append('audio', blob, 'gordon-command.webm');
+        out.textContent = 'Transcribing on Spark, then asking Nemotron...';
+        transcript.textContent = '';
+        try {
+          const res = await fetch('/api/voice/ask', { method: 'POST', body: form });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.detail || res.statusText);
+          transcript.textContent = `Transcript: ${data.transcript}`;
+          renderAnswer(data);
+        } catch (err) {
+          out.innerHTML = `<span class="error">${err.message}</span>`;
+        } finally {
+          btn.disabled = false;
+          btn.textContent = 'Tap to speak (local GPU ASR)';
+        }
+      };
+      mediaRecorder.start();
+      btn.textContent = 'Stop and ask Gordon';
     });
 
     loadData().catch(err => {

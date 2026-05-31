@@ -5,6 +5,7 @@ from typing import Any
 
 import httpx
 
+from app.interjection import Interjection, prompt_overlay
 from app.config import APP_NAME, APP_TAGLINE, OLLAMA_MODEL, OLLAMA_URL
 from app.legal_rag import format_law_context, retrieve_law_cards
 
@@ -32,7 +33,11 @@ def _law_cards_for(snapshot: dict[str, Any], question: str | None = None) -> str
     return format_law_context(cards)
 
 
-async def generate_patrol_brief(snapshot: dict[str, Any]) -> dict[str, str]:
+async def generate_patrol_brief(
+    snapshot: dict[str, Any],
+    *,
+    interjection: Interjection | None = None,
+) -> dict[str, Any]:
     law_context = _law_cards_for(snapshot)
     prompt = (
         "Create a PATROL BRIEF for a Toronto officer starting a shift.\n"
@@ -43,6 +48,7 @@ async def generate_patrol_brief(snapshot: dict[str, Any]) -> dict[str, str]:
         "Lookout: factual situational awareness from Toronto data (roads, KSI patterns, construction).\n"
         "Authority & policy: what officers may consider, with [card_id] citations from LAW CARDS.\n"
         "Do not: explicit overreach warnings with [card_id] citations.\n\n"
+        f"{prompt_overlay(interjection)}\n"
         f"TORONTO DATA SNAPSHOT:\n{_format_snapshot(snapshot)}\n\n"
         f"LAW CARDS:\n{law_context}"
     )
@@ -56,13 +62,19 @@ async def generate_briefing(snapshot: dict[str, Any]) -> str:
     return result["briefing"]
 
 
-async def answer_question(question: str, snapshot: dict[str, Any]) -> dict[str, str]:
+async def answer_question(
+    question: str,
+    snapshot: dict[str, Any],
+    *,
+    interjection: Interjection | None = None,
+) -> dict[str, Any]:
     law_context = _law_cards_for(snapshot, question)
     prompt = (
         f"OFFICER QUESTION: {question}\n\n"
         "Answer with the same three sections when helpful:\n"
         "## Lookout\n## Authority & policy\n## Do not\n\n"
         "Cite law cards as [card_id]. Do not exceed provided context.\n\n"
+        f"{prompt_overlay(interjection)}\n"
         f"TORONTO DATA SNAPSHOT:\n{_format_snapshot(snapshot)}\n\n"
         f"LAW CARDS:\n{law_context}"
     )
@@ -76,6 +88,7 @@ async def _ollama_generate(prompt: str) -> str:
         "prompt": prompt,
         "system": SYSTEM_PROMPT,
         "stream": False,
+        "think": False,
         "options": {
             "temperature": 0.2,
             "num_predict": 900,

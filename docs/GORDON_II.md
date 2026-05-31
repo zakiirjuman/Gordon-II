@@ -84,6 +84,14 @@ See **[DEPLOY.md](./DEPLOY.md)**. Default: `~/urban-ops-copilot` on port **8080*
 - [ ] Point-on-map brief: click → reverse geocode → spatial join
 - [ ] cuDF aggregation for KSI × restriction joins at scale
 
+### Voice ASR decision (demo)
+
+- Preferred live GPU path: **local ARM64 Parakeet TDT service** in `asr/parakeet-spark`, built from `nvcr.io/nvidia/pytorch:25.11-py3` and serving `nvidia/parakeet-tdt-0.6b-v3` on port `8010`.
+- Why not the direct NIM image: the accessible `parakeet-ctc-1.1b-asr` image is `linux/amd64`, which does not match the GX10 `linux/arm64` host.
+- App fallback path: **NVIDIA NeMo / Parakeet ASR** on PyTorch CUDA when a compatible GB10 ARM64 PyTorch stack is installed in the app venv.
+- Last-resort fallback: `faster-whisper` CPU. On the current GX10 ARM64 environment, its CTranslate2 backend reports no CUDA support.
+- Judge framing: voice stays local to Spark; the ASR stack prefers NVIDIA GPU services and degrades safely if the GPU ASR service is unavailable.
+
 ## Prompt contract
 
 `app/llm.py` forces three markdown sections. Do not remove headers without updating the UI copy.
@@ -96,6 +104,7 @@ System rules baked in:
 
 ## Hackathon narrative
 
+- **Judges:** see **[JUDGING.md](./JUDGING.md)** for model choices, two-service deployment, and demo beats.
 - **Track:** Urban Operations + public safety angle  
 - **Toronto data:** ArcGIS RODARS layer 77, construction 71, KSI CSV (12mo window in code)  
 - **NVIDIA:** Local Nemotron on 121GB unified memory; corpus RAG on Spark; room to add cuDF / NIM  
