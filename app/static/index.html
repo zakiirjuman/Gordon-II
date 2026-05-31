@@ -62,17 +62,42 @@
       margin-bottom: 1rem;
     }
     .layer-toggles {
-      display: grid;
-      gap: 0.35rem;
-      font-size: 0.8rem;
-      color: var(--muted);
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
     }
-    .layer-toggles label {
+    .layer-item {
       display: flex;
       align-items: center;
-      gap: 0.45rem;
+      gap: 0.55rem;
+      cursor: pointer;
+      font-size: 0.82rem;
+      color: var(--text);
+      line-height: 1.3;
+      width: 100%;
+    }
+    .layer-item input[type="checkbox"] {
+      width: 1rem;
+      height: 1rem;
+      margin: 0;
+      flex-shrink: 0;
+      accent-color: var(--accent);
       cursor: pointer;
     }
+    .layer-swatch {
+      width: 0.85rem;
+      height: 0.85rem;
+      border-radius: 999px;
+      flex-shrink: 0;
+      border: 1px solid rgba(255,255,255,0.25);
+    }
+    .layer-swatch.ward { background: rgba(91, 140, 255, 0.55); border-radius: 2px; width: 1rem; height: 0.55rem; }
+    .layer-swatch.school { background: #b48cff; }
+    .layer-swatch.fire { background: #ff7a45; }
+    .layer-swatch.ksi { background: #ff5f5f; }
+    .layer-swatch.sim { background: #5ce1ff; border-style: dashed; }
+    .layer-swatch.restrict { background: #76b900; border-radius: 2px; width: 1rem; height: 0.35rem; }
+    .layer-name { flex: 1; min-width: 0; }
     .stat {
       background: rgba(255,255,255,0.03);
       border: 1px solid var(--border);
@@ -101,7 +126,8 @@
       width: 100%;
     }
     button:disabled { opacity: 0.6; cursor: wait; }
-    input {
+    input[type="text"],
+    input:not([type="checkbox"]) {
       width: 100%;
       background: #0d1526;
       color: var(--text);
@@ -111,12 +137,50 @@
       margin: 0.5rem 0;
     }
     .output {
-      white-space: pre-wrap;
       font-size: 0.85rem;
-      line-height: 1.5;
+      line-height: 1.55;
       color: #d8e4ff;
       margin-top: 0.75rem;
     }
+    .output.markdown h2,
+    .output.markdown h3 {
+      font-size: 0.92rem;
+      font-weight: 700;
+      color: var(--accent);
+      margin: 1rem 0 0.45rem;
+      padding-bottom: 0.3rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .output.markdown h2:first-child,
+    .output.markdown h3:first-child { margin-top: 0; }
+    .output.markdown ul,
+    .output.markdown ol {
+      margin: 0.35rem 0 0.65rem;
+      padding-left: 1.15rem;
+    }
+    .output.markdown li { margin: 0.3rem 0; }
+    .output.markdown p { margin: 0.45rem 0; }
+    .output.markdown code {
+      background: rgba(118, 185, 0, 0.14);
+      color: #c9f58b;
+      padding: 0.08rem 0.35rem;
+      border-radius: 4px;
+      font-size: 0.82em;
+    }
+    .output.markdown strong { color: #f0f4ff; }
+    .output.plain {
+      white-space: pre-wrap;
+    }
+    .law-pre {
+      white-space: pre-wrap;
+      font-size: 0.78rem;
+      line-height: 1.45;
+      color: var(--muted);
+      margin: 0.5rem 0 0;
+      max-height: 220px;
+      overflow: auto;
+    }
+    #askBtn { margin-bottom: 0.5rem; }
     .latency {
       color: var(--muted);
       font-size: 0.75rem;
@@ -203,13 +267,33 @@
       <section class="panel">
         <h2>Map layers</h2>
         <div class="layer-toggles">
-          <label><input type="checkbox" id="toggleWards" checked /> City wards</label>
-          <label><input type="checkbox" id="toggleSchools" checked /> Schools</label>
-          <label><input type="checkbox" id="toggleFire" checked /> Fire stations</label>
-          <label><input type="checkbox" id="toggleKsi" /> KSI collisions (12 mo)</label>
-          <label><input type="checkbox" id="toggleSimulated" checked /> Simulated backup / EMS (demo)</label>
+          <label class="layer-item" for="toggleWards">
+            <input type="checkbox" id="toggleWards" checked />
+            <span class="layer-swatch ward" aria-hidden="true"></span>
+            <span class="layer-name">City wards</span>
+          </label>
+          <label class="layer-item" for="toggleSchools">
+            <input type="checkbox" id="toggleSchools" checked />
+            <span class="layer-swatch school" aria-hidden="true"></span>
+            <span class="layer-name">Schools</span>
+          </label>
+          <label class="layer-item" for="toggleFire">
+            <input type="checkbox" id="toggleFire" checked />
+            <span class="layer-swatch fire" aria-hidden="true"></span>
+            <span class="layer-name">Fire stations</span>
+          </label>
+          <label class="layer-item" for="toggleKsi">
+            <input type="checkbox" id="toggleKsi" />
+            <span class="layer-swatch ksi" aria-hidden="true"></span>
+            <span class="layer-name">KSI collisions (12 mo)</span>
+          </label>
+          <label class="layer-item" for="toggleSimulated">
+            <input type="checkbox" id="toggleSimulated" checked />
+            <span class="layer-swatch sim" aria-hidden="true"></span>
+            <span class="layer-name">Simulated backup / EMS (demo)</span>
+          </label>
         </div>
-        <p class="hint">Simulated unit markers are training-only — not live CAD or dispatch.</p>
+        <p class="hint">Green lines = active restrictions (always on). Simulated units are training-only — not live CAD.</p>
       </section>
 
       <section class="panel">
@@ -220,7 +304,7 @@
         <div id="briefingLatency" class="latency"></div>
         <details id="lawDetails" hidden>
           <summary>Law cards retrieved</summary>
-          <pre id="lawContext" class="output"></pre>
+          <pre id="lawContext" class="law-pre"></pre>
         </details>
       </section>
 
@@ -260,8 +344,41 @@
     </aside>
   </main>
 
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script>
+    marked.setOptions({ gfm: true, breaks: true, headerIds: false, mangle: false });
+
+    function escapeHtml(text) {
+      return String(text)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    function renderMarkdown(element, markdown) {
+      element.classList.remove('plain');
+      element.classList.add('markdown');
+      const raw = markdown || '';
+      try {
+        element.innerHTML = marked.parse(raw);
+      } catch (_) {
+        element.classList.add('plain');
+        element.textContent = raw;
+      }
+    }
+
+    function renderPlain(element, text) {
+      element.classList.remove('markdown');
+      element.classList.add('plain');
+      element.textContent = text || '';
+    }
+
+    function renderError(element, message) {
+      element.classList.remove('markdown', 'plain');
+      element.innerHTML = `<span class="error">${escapeHtml(message)}</span>`;
+    }
     const map = L.map('map').setView([43.6532, -79.3832], 11);
     L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
       attribution: '&copy; OpenStreetMap &copy; CARTO'
@@ -446,7 +563,7 @@
     }
 
     function renderAnswer(data) {
-      document.getElementById('answer').textContent = data.answer;
+      renderMarkdown(document.getElementById('answer'), data.answer);
       renderInterjection(data.interjection);
       renderTimings('answerLatency', data.timings_ms);
       showLawContext(data.law_context);
@@ -540,14 +657,14 @@
       const btn = document.getElementById('briefingBtn');
       const out = document.getElementById('briefing');
       btn.disabled = true;
-      out.textContent = 'Running patrol brief on Spark (Nemotron + law cards)...';
+      renderPlain(out, 'Running patrol brief on Spark (Nemotron + law cards)...');
       try {
         const data = await postJson('/api/patrol-brief');
-        out.textContent = data.briefing;
+        renderMarkdown(out, data.briefing);
         renderTimings('briefingLatency', data.timings_ms);
         showLawContext(data.law_context);
       } catch (err) {
-        out.innerHTML = `<span class="error">${err.message}</span>`;
+        renderError(out, err.message);
       } finally {
         btn.disabled = false;
       }
@@ -558,12 +675,12 @@
       if (selectedMarker) selectedMarker.remove();
       selectedMarker = L.marker([lat, lng], { zIndexOffset: 1000 }).addTo(map);
       const out = document.getElementById('briefing');
-      out.textContent = `Briefing 500m around ${lat.toFixed(5)}, ${lng.toFixed(5)} on Spark...`;
+      renderPlain(out, `Briefing 500m around ${lat.toFixed(5)}, ${lng.toFixed(5)} on Spark...`);
       document.getElementById('briefingLatency').textContent = '';
       try {
         const data = await postJson('/api/patrol-brief/point', { lat, lng, radius_m: 500 });
         const locationLabel = locationLabelFromSnapshot(data.snapshot, lat, lng);
-        out.textContent = data.briefing;
+        renderMarkdown(out, data.briefing);
         renderTimings('briefingLatency', data.timings_ms, locationLabel);
         const ward = data.snapshot?.ward;
         const popupParts = [
@@ -573,7 +690,7 @@
         selectedMarker.bindPopup(`<strong>${popupParts.join('<br/>') || 'Patrol point'}</strong>`).openPopup();
         showLawContext(data.law_context);
       } catch (err) {
-        out.innerHTML = `<span class="error">${err.message}</span>`;
+        renderError(out, err.message);
       }
     });
 
@@ -583,12 +700,12 @@
       if (!question) return;
       const btn = document.getElementById('askBtn');
       btn.disabled = true;
-      out.textContent = 'Thinking locally on Spark...';
+      renderPlain(out, 'Thinking locally on Spark...');
       try {
         const data = await postJson('/api/ask', { question });
         renderAnswer(data);
       } catch (err) {
-        out.innerHTML = `<span class="error">${err.message}</span>`;
+        renderError(out, err.message);
       } finally {
         btn.disabled = false;
       }
@@ -620,7 +737,7 @@
         const blob = new Blob(audioChunks, { type: 'audio/webm' });
         const form = new FormData();
         form.append('audio', blob, 'gordon-command.webm');
-        out.textContent = 'Transcribing on Spark, then asking Nemotron...';
+        renderPlain(out, 'Transcribing on Spark, then asking Nemotron...');
         transcript.textContent = '';
         try {
           const res = await fetch('/api/voice/ask', { method: 'POST', body: form });
@@ -629,7 +746,7 @@
           transcript.textContent = `Transcript: ${data.transcript}`;
           renderAnswer(data);
         } catch (err) {
-          out.innerHTML = `<span class="error">${err.message}</span>`;
+          renderError(out, err.message);
         } finally {
           btn.disabled = false;
           btn.textContent = 'Tap to speak (local GPU ASR)';
@@ -696,7 +813,7 @@
     });
 
     loadData().catch(err => {
-      document.getElementById('briefing').innerHTML = `<span class="error">${err.message}</span>`;
+      renderError(document.getElementById('briefing'), err.message);
     });
   </script>
 </body>
